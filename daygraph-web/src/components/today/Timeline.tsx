@@ -8,9 +8,15 @@ interface TimelineProps {
   activities: ActivityRecord[]
   isLoading: boolean
   errorMessage: string | null
+  onActivityClick: (activity: ActivityRecord) => void
 }
 
-function Timeline({ activities, isLoading, errorMessage }: TimelineProps) {
+function Timeline({
+  activities,
+  isLoading,
+  errorMessage,
+  onActivityClick,
+}: TimelineProps) {
   if (isLoading) {
     return <LoadingState message="Loading activities..." title="Today Timeline" />
   }
@@ -32,7 +38,8 @@ function Timeline({ activities, isLoading, errorMessage }: TimelineProps) {
           {activities.map((activity) => (
             <li
               key={activity.id}
-              className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+              className="cursor-pointer rounded-lg border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300 hover:bg-slate-100"
+              onClick={() => onActivityClick(activity)}
             >
               <p className="text-sm font-medium text-slate-900">
                 {activity.activity}

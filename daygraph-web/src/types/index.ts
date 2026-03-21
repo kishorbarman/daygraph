@@ -63,3 +63,33 @@ export interface Preset {
   defaultDuration?: number
   usageCount: number
 }
+
+export interface ParsedActivityDraft {
+  activity: string
+  category: ActivityCategory
+  subCategory: string
+  timestamp: string
+  endTimestamp: string | null
+  durationMinutes: number | null
+  isPointInTime: boolean
+  tags: string[]
+  quantity: number | null
+  timezone: string
+}
+
+export interface ParseActivityPreviewResponse {
+  parsed: ParsedActivityDraft[]
+  confidence: number
+  warnings: string[]
+}
+
+export interface ActivityRawRecord {
+  id: string
+  input: string
+  source: ActivitySource
+  status: 'pending' | 'parsed' | 'failed' | 'retried'
+  errorMessage?: string
+  parsedActivityIds?: string[]
+  createdAt: Timestamp
+  updatedAt?: Timestamp
+}

@@ -4,13 +4,44 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import TodayTab from '../TodayTab'
 import type { ActivityRecord } from '../../../types'
 
+const makeMockActivity = (): ActivityRecord =>
+  ({
+    id: 'a1',
+    activity: 'Breakfast',
+    category: 'meal',
+    subCategory: 'breakfast',
+    timestamp: { toDate: () => new Date('2026-03-21T08:00:00Z') },
+    endTimestamp: null,
+    durationMinutes: null,
+    isPointInTime: true,
+    tags: [],
+    mood: null,
+    energy: null,
+    notes: 'Breakfast',
+    source: 'text',
+    rawInput: 'Breakfast',
+    createdAt: { toDate: () => new Date('2026-03-21T08:00:00Z') },
+    editedAt: null,
+  }) as unknown as ActivityRecord
+
 const {
-  createManualTextActivityMock,
+  createActivitiesFromPreviewMock,
+  createRawActivityInputMock,
   createPresetActivityMock,
+  deleteActivityEntryMock,
+  parseActivityPreviewMock,
+  retryRawActivityInputMock,
+  saveActivityEditsMock,
   useTodayActivitiesMock,
+  useTodayRawQueueMock,
 } = vi.hoisted(() => ({
-  createManualTextActivityMock: vi.fn(),
+  createActivitiesFromPreviewMock: vi.fn(),
+  createRawActivityInputMock: vi.fn(),
   createPresetActivityMock: vi.fn(),
+  deleteActivityEntryMock: vi.fn(),
+  parseActivityPreviewMock: vi.fn(),
+  retryRawActivityInputMock: vi.fn(),
+  saveActivityEditsMock: vi.fn(),
   useTodayActivitiesMock: vi.fn<
     () => {
       activities: ActivityRecord[]
@@ -18,15 +49,28 @@ const {
       errorMessage: string | null
     }
   >(),
+  useTodayRawQueueMock: vi.fn(() => ({ rawItems: [] })),
 }))
 
 vi.mock('../../../services/activityService', () => ({
-  createManualTextActivity: createManualTextActivityMock,
+  createActivitiesFromPreview: createActivitiesFromPreviewMock,
+  createRawActivityInput: createRawActivityInputMock,
   createPresetActivity: createPresetActivityMock,
+  deleteActivityEntry: deleteActivityEntryMock,
+  retryRawActivityInput: retryRawActivityInputMock,
+  saveActivityEdits: saveActivityEditsMock,
+}))
+
+vi.mock('../../../services/parseService', () => ({
+  parseActivityPreview: parseActivityPreviewMock,
 }))
 
 vi.mock('../../../hooks/useTodayActivities', () => ({
   useTodayActivities: useTodayActivitiesMock,
+}))
+
+vi.mock('../../../hooks/useTodayRawQueue', () => ({
+  useTodayRawQueue: useTodayRawQueueMock,
 }))
 
 describe('TodayTab', () => {
@@ -37,19 +81,42 @@ describe('TodayTab', () => {
       isLoading: false,
       errorMessage: null,
     })
+    useTodayRawQueueMock.mockReturnValue({ rawItems: [] })
+    parseActivityPreviewMock.mockResolvedValue({
+      parsed: [
+        {
+          activity: 'Worked on roadmap',
+          category: 'work',
+          subCategory: 'general',
+          timestamp: new Date('2026-03-21T08:30:00Z').toISOString(),
+          endTimestamp: null,
+          durationMinutes: null,
+          isPointInTime: true,
+          tags: [],
+          quantity: null,
+          timezone: 'America/Los_Angeles',
+        },
+      ],
+      confidence: 0.8,
+      warnings: [],
+    })
   })
 
-  it('submits manual text activity through service', async () => {
+  it('parses text input and saves from preview modal', async () => {
     const user = userEvent.setup()
 
     render(<TodayTab user={{ uid: 'u1' } as never} />)
 
     await user.type(screen.getByLabelText('What did you do?'), 'Worked on roadmap')
     await user.click(screen.getByRole('button', { name: 'Log' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(createManualTextActivityMock).toHaveBeenCalledWith(
+    expect(parseActivityPreviewMock).toHaveBeenCalled()
+    expect(createActivitiesFromPreviewMock).toHaveBeenCalledWith(
       'u1',
+      expect.any(Array),
       'Worked on roadmap',
+      'text',
     )
   })
 
@@ -62,5 +129,40 @@ describe('TodayTab', () => {
 
     expect(createPresetActivityMock).toHaveBeenCalled()
     expect(createPresetActivityMock.mock.calls[0][0]).toBe('u1')
+  })
+
+  it('opens edit modal and saves activity changes', async () => {
+    const user = userEvent.setup()
+    useTodayActivitiesMock.mockReturnValue({
+      activities: [makeMockActivity()],
+      isLoading: false,
+      errorMessage: null,
+    })
+
+    render(<TodayTab user={{ uid: 'u1' } as never} />)
+
+    await user.click(screen.getAllByText('Breakfast')[0])
+    await user.clear(screen.getByDisplayValue('Breakfast'))
+    await user.type(screen.getByRole('textbox', { name: /Activity/i }), 'Late breakfast')
+    await user.selectOptions(screen.getByRole('combobox', { name: /Category/i }), 'leisure')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(saveActivityEditsMock).toHaveBeenCalled()
+  })
+
+  it('deletes an activity from edit modal', async () => {
+    const user = userEvent.setup()
+    useTodayActivitiesMock.mockReturnValue({
+      activities: [makeMockActivity()],
+      isLoading: false,
+      errorMessage: null,
+    })
+
+    render(<TodayTab user={{ uid: 'u1' } as never} />)
+
+    await user.click(screen.getAllByText('Breakfast')[0])
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(deleteActivityEntryMock).toHaveBeenCalledWith('u1', 'a1')
   })
 })

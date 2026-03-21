@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import Timeline from '../Timeline'
 import type { ActivityRecord } from '../../../types'
 
@@ -28,7 +28,14 @@ const mockActivity = {
 
 describe('Timeline', () => {
   it('renders loading state', () => {
-    render(<Timeline activities={[]} errorMessage={null} isLoading />)
+    render(
+      <Timeline
+        activities={[]}
+        errorMessage={null}
+        isLoading
+        onActivityClick={vi.fn()}
+      />,
+    )
 
     expect(screen.getByText('Today Timeline')).toBeInTheDocument()
     expect(screen.getByText('Loading activities...')).toBeInTheDocument()
@@ -40,6 +47,7 @@ describe('Timeline', () => {
         activities={[]}
         errorMessage="Unable to load timeline"
         isLoading={false}
+        onActivityClick={vi.fn()}
       />,
     )
 
@@ -52,6 +60,7 @@ describe('Timeline', () => {
         activities={[mockActivity]}
         errorMessage={null}
         isLoading={false}
+        onActivityClick={vi.fn()}
       />,
     )
 
