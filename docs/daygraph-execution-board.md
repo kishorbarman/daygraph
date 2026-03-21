@@ -49,20 +49,28 @@ Phase 1 status (updated March 21, 2026):
 
 Entry criteria: Phase 1 exit gate passed.
 
-| ID | Step | Depends On | Deliverable | Done When |
-|---|---|---|---|---|
-| P2-01 | Implement `parseActivityPreview` callable | P1-10 | Function + schema validation | Returns structured drafts reliably |
-| P2-02 | Build Parse Preview modal (edit/confirm) | P2-01 | UI for review before save | User edits persist correctly |
-| P2-03 | Implement `activitiesRaw` write pipeline | P1-10 | Raw queue path in service layer | Raw docs created with status |
-| P2-04 | Implement `onActivityRawCreate` trigger parse flow | P2-03 | Raw -> parsed `activities` pipeline | Batch inputs converted correctly |
-| P2-05 | Implement corrections capture + storage | P2-02,P2-04 | `corrections` write path | Corrections stored with metadata |
-| P2-06 | Feed recent corrections into parser context | P2-05 | Few-shot correction loop | Repeat misclassification decreases |
-| P2-07 | Add voice input hook + mic UI | P2-02 | Speech-to-text input flow | Voice transcript reaches parser |
-| P2-08 | Implement parse failure/retry UX | P2-04 | Failed status handling | No input loss on AI failures |
-| P2-09 | Phase 2 integration + contract tests | P2-01..P2-08 | Tested AI logging stack | Text/voice single+batch pass |
+| ID | Step | Depends On | Deliverable | Done When | Status |
+|---|---|---|---|---|---|
+| P2-01 | Implement `parseActivityPreview` callable | P1-10 | Function + schema validation | Returns structured drafts reliably | Completed |
+| P2-02 | Build Parse Preview modal (edit/confirm) | P2-01 | UI for review before save | User edits persist correctly | Completed |
+| P2-03 | Implement `activitiesRaw` write pipeline | P1-10 | Raw queue path in service layer | Raw docs created with status | Completed |
+| P2-04 | Implement `onActivityRawCreate` trigger parse flow | P2-03 | Raw -> parsed `activities` pipeline | Batch inputs converted correctly | Completed |
+| P2-05 | Implement corrections capture + storage | P2-02,P2-04 | `corrections` write path | Corrections stored with metadata | Completed |
+| P2-06 | Feed recent corrections into parser context | P2-05 | Few-shot correction loop | Repeat misclassification decreases | Completed |
+| P2-07 | Add voice input hook + mic UI | P2-02 | Speech-to-text input flow | Voice transcript reaches parser | Completed |
+| P2-08 | Implement parse failure/retry UX | P2-04 | Failed status handling | No input loss on AI failures | Completed |
+| P2-09 | Phase 2 integration + contract tests | P2-01..P2-08 | Tested AI logging stack | Text/voice single+batch pass | Completed |
 
 Phase 2 exit gate:
 - Natural-language and voice logging are stable with confirmation, corrections, and retries.
+
+Phase 2 status (updated March 21, 2026):
+- Exit gate met.
+- Gemini-backed parsing integrated in Cloud Functions (`parseActivityPreview`, `onActivityRawCreate`) with fallback parser safety.
+- `activitiesRaw` queue + Firestore trigger pipeline active in production.
+- Timeline edit/delete shipped; category edits write correction records.
+- Voice logging shipped in Today input, plus raw-queue parse retry UX.
+- Local dev validation and verification suite passing (`npm run verify:phase1`), and Phase 2 functions deployed to `daygraph-49867`.
 
 ---
 
