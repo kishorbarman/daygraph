@@ -8,6 +8,11 @@ function LoginScreen({ onSignIn, isSigningIn, errorMessage }: LoginScreenProps) 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col items-center justify-center bg-slate-50 text-center sm:px-6">
       <div className="w-full border-y border-slate-200 bg-white px-5 py-10 sm:max-w-md sm:rounded-2xl sm:border sm:p-8 sm:shadow-sm">
+        <img
+          alt="DayGraph logo"
+          className="mx-auto mb-4 h-14 w-14 rounded-2xl"
+          src="/brand/daygraph-logo.svg"
+        />
         <p className="mb-2 text-sm font-medium uppercase tracking-wide text-blue-600">
           DayGraph
         </p>
