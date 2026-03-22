@@ -9,8 +9,17 @@ import {
   saveActivityMoodEnergy,
   saveActivityEdits,
 } from '../../services/activityService'
+import {
+  saveUserCustomCategories,
+  subscribeUserCustomCategories,
+} from '../../services/categoryService'
 import { parseActivityPreview } from '../../services/parseService'
 import { dismissSuggestion, getSuggestion } from '../../services/suggestionService'
+import {
+  BASE_ACTIVITY_CATEGORIES,
+  isBaseActivityCategory,
+  normalizeCategoryLabel,
+} from '../../constants/categories'
 import type {
   ActivityRawRecord,
   ActivityCategory,
@@ -75,6 +84,7 @@ function TodayTab({ user }: TodayTabProps) {
   const [selectedActivity, setSelectedActivity] = useState<ActivityRecord | null>(
     null,
   )
+  const [customCategories, setCustomCategories] = useState<string[]>([])
   const [suggestion, setSuggestion] = useState<SuggestionItem | null>(null)
   const [promptRefreshKey, setPromptRefreshKey] = useState(0)
 
@@ -118,6 +128,23 @@ function TodayTab({ user }: TodayTabProps) {
     activities.length >= 3 &&
     activities.length % 3 === 0 &&
     dismissedForCount !== activities.length
+
+  const categoryOptions = useMemo(
+    () => [...BASE_ACTIVITY_CATEGORIES, ...customCategories],
+    [customCategories],
+  )
+
+  useEffect(() => {
+    const unsubscribe = subscribeUserCustomCategories(
+      user.uid,
+      setCustomCategories,
+      (error) => {
+        console.error('Failed to load custom categories:', error)
+      },
+    )
+
+    return () => unsubscribe()
+  }, [user.uid])
 
   useEffect(() => {
     let isCancelled = false
@@ -182,7 +209,20 @@ function TodayTab({ user }: TodayTabProps) {
   }
 
   const handlePreviewConfirm = async (drafts: ParseActivityPreviewResponse['parsed']) => {
-    await createActivitiesFromPreview(user.uid, drafts, rawInput, 'text')
+    const normalizedDrafts = drafts.map((draft) => ({
+      ...draft,
+      category: normalizeCategoryLabel(draft.category),
+    }))
+    const newCustomCategories = normalizedDrafts
+      .map((draft) => draft.category)
+      .filter((category) => category && !isBaseActivityCategory(category))
+
+    try {
+      await saveUserCustomCategories(user.uid, newCustomCategories)
+    } catch (error) {
+      console.error('Failed to save custom categories from preview:', error)
+    }
+    await createActivitiesFromPreview(user.uid, normalizedDrafts, rawInput, 'text')
     setPreviewResult(null)
     setRawInput('')
   }
@@ -195,11 +235,23 @@ function TodayTab({ user }: TodayTabProps) {
   }) => {
     if (!selectedActivity) return
 
+    const normalizedCategory = normalizeCategoryLabel(input.category)
+    if (normalizedCategory && !isBaseActivityCategory(normalizedCategory)) {
+      try {
+        await saveUserCustomCategories(user.uid, [normalizedCategory])
+      } catch (error) {
+        console.error('Failed to save custom category from edit:', error)
+      }
+    }
+
     await saveActivityEdits({
       uid: user.uid,
       activityId: selectedActivity.id,
       previous: selectedActivity,
-      next: input,
+      next: {
+        ...input,
+        category: normalizedCategory || selectedActivity.category,
+      },
     })
     setSelectedActivity(null)
   }
@@ -317,6 +369,7 @@ function TodayTab({ user }: TodayTabProps) {
       </div>
       {previewResult ? (
         <ParsePreviewModal
+          categoryOptions={categoryOptions}
           confidence={previewResult.confidence}
           initialDrafts={previewResult.parsed}
           onCancel={() => setPreviewResult(null)}
@@ -328,6 +381,7 @@ function TodayTab({ user }: TodayTabProps) {
       {selectedActivity ? (
         <ActivityEditModal
           activity={selectedActivity}
+          categoryOptions={categoryOptions}
           onCancel={() => setSelectedActivity(null)}
           onDelete={handleActivityDelete}
           onSave={handleActivitySave}

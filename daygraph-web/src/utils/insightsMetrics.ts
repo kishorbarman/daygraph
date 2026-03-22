@@ -1,4 +1,4 @@
-import type { ActivityCategory, DailyStatsRecord, InsightsRangeDays } from '../types'
+import type { BaseActivityCategory, DailyStatsRecord, InsightsRangeDays } from '../types'
 
 export function computeDailySummary(
   dailyStats: DailyStatsRecord[],
@@ -29,7 +29,7 @@ export function computeDailySummary(
 }
 
 export function computeCategoryMinutes(dailyStats: DailyStatsRecord[]) {
-  const categories: ActivityCategory[] = [
+  const categories: BaseActivityCategory[] = [
     'sleep',
     'work',
     'exercise',

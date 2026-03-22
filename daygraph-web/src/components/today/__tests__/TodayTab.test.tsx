@@ -32,6 +32,8 @@ const {
   parseActivityPreviewMock,
   retryRawActivityInputMock,
   saveActivityEditsMock,
+  saveUserCustomCategoriesMock,
+  subscribeUserCustomCategoriesMock,
   useTodayActivitiesMock,
   useActivityMonthDaysMock,
   useTodayRawQueueMock,
@@ -43,6 +45,8 @@ const {
   parseActivityPreviewMock: vi.fn(),
   retryRawActivityInputMock: vi.fn(),
   saveActivityEditsMock: vi.fn(),
+  saveUserCustomCategoriesMock: vi.fn(),
+  subscribeUserCustomCategoriesMock: vi.fn(() => () => {}),
   useTodayActivitiesMock: vi.fn<
     () => {
       activities: ActivityRecord[]
@@ -65,6 +69,11 @@ vi.mock('../../../services/activityService', () => ({
 
 vi.mock('../../../services/parseService', () => ({
   parseActivityPreview: parseActivityPreviewMock,
+}))
+
+vi.mock('../../../services/categoryService', () => ({
+  saveUserCustomCategories: saveUserCustomCategoriesMock,
+  subscribeUserCustomCategories: subscribeUserCustomCategoriesMock,
 }))
 
 vi.mock('../../../hooks/useTodayActivities', () => ({
@@ -154,7 +163,8 @@ describe('TodayTab', () => {
     await user.click(within(timelineSection as HTMLElement).getByText('Breakfast'))
     await user.clear(screen.getByDisplayValue('Breakfast'))
     await user.type(screen.getByRole('textbox', { name: /Activity/i }), 'Late breakfast')
-    await user.selectOptions(screen.getByRole('combobox', { name: /Category/i }), 'leisure')
+    await user.clear(screen.getByLabelText(/Category/i))
+    await user.type(screen.getByLabelText(/Category/i), 'leisure')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(saveActivityEditsMock).toHaveBeenCalled()

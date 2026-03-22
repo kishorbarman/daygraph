@@ -1,24 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { ActivityCategory, ParsedActivityDraft } from '../../types'
-
-const CATEGORY_OPTIONS: ActivityCategory[] = [
-  'meal',
-  'caffeine',
-  'sleep',
-  'exercise',
-  'social',
-  'work',
-  'leisure',
-  'self_care',
-  'errand',
-  'transit',
-]
+import { normalizeCategoryLabel } from '../../constants/categories'
+import type { ParsedActivityDraft } from '../../types'
 
 interface ParsePreviewModalProps {
   rawInput: string
   confidence: number
   warnings: string[]
   initialDrafts: ParsedActivityDraft[]
+  categoryOptions: string[]
   onCancel: () => void
   onConfirm: (drafts: ParsedActivityDraft[]) => Promise<void>
 }
@@ -28,6 +17,7 @@ function ParsePreviewModal({
   confidence,
   warnings,
   initialDrafts,
+  categoryOptions,
   onCancel,
   onConfirm,
 }: ParsePreviewModalProps) {
@@ -49,7 +39,17 @@ function ParsePreviewModal({
     setIsSaving(true)
     setErrorMessage(null)
     try {
-      await onConfirm(drafts)
+      const normalizedDrafts = drafts.map((draft) => ({
+        ...draft,
+        category: normalizeCategoryLabel(draft.category),
+      }))
+
+      if (normalizedDrafts.some((draft) => !draft.category)) {
+        setErrorMessage('Please pick or enter a category for each activity.')
+        return
+      }
+
+      await onConfirm(normalizedDrafts)
     } catch (error) {
       console.error('Failed to save parsed activities:', error)
       setErrorMessage('Could not save parsed activities. Please try again.')
@@ -80,21 +80,17 @@ function ParsePreviewModal({
                 value={draft.activity}
               />
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <select
+                <input
                   className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                  list="parse-preview-category-options"
                   onChange={(event) =>
                     updateDraft(index, {
-                      category: event.target.value as ActivityCategory,
+                      category: event.target.value,
                     })
                   }
+                  placeholder="Pick or type category"
                   value={draft.category}
-                >
-                  {CATEGORY_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                />
                 <input
                   className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
                   onChange={(event) => {
@@ -124,6 +120,11 @@ function ParsePreviewModal({
             </div>
           ))}
         </div>
+        <datalist id="parse-preview-category-options">
+          {categoryOptions.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
 
         {errorMessage ? (
           <p className="mt-3 text-xs text-rose-600">{errorMessage}</p>

@@ -1,21 +1,10 @@
 import { useMemo, useState } from 'react'
+import { normalizeCategoryLabel } from '../../constants/categories'
 import type { ActivityCategory, ActivityRecord } from '../../types'
-
-const CATEGORY_OPTIONS: ActivityCategory[] = [
-  'meal',
-  'caffeine',
-  'sleep',
-  'exercise',
-  'social',
-  'work',
-  'leisure',
-  'self_care',
-  'errand',
-  'transit',
-]
 
 interface ActivityEditModalProps {
   activity: ActivityRecord
+  categoryOptions: string[]
   onCancel: () => void
   onDelete: () => Promise<void>
   onSave: (input: {
@@ -48,12 +37,15 @@ function minutesFromDurationInput(value: string, unit: DurationUnit) {
 
 function ActivityEditModal({
   activity,
+  categoryOptions,
   onCancel,
   onDelete,
   onSave,
 }: ActivityEditModalProps) {
   const [activityText, setActivityText] = useState(activity.activity)
-  const [category, setCategory] = useState<ActivityCategory>(activity.category)
+  const [category, setCategory] = useState<ActivityCategory>(
+    normalizeCategoryLabel(activity.category),
+  )
   const [durationValue, setDurationValue] = useState(
     activity.durationMinutes === null ? '' : `${activity.durationMinutes}`,
   )
@@ -102,9 +94,15 @@ function ActivityEditModal({
         return
       }
 
+      const normalizedCategory = normalizeCategoryLabel(category)
+      if (!normalizedCategory) {
+        setErrorMessage('Please select or enter a category.')
+        return
+      }
+
       await onSave({
         activity: activityText,
-        category,
+        category: normalizedCategory,
         durationMinutes: nextDurationMinutes,
         timestamp: parsedTimestamp,
       })
@@ -148,18 +146,19 @@ function ActivityEditModal({
 
           <label className="block" htmlFor="activity-edit-category">
             <span className="mb-1 block text-xs font-medium text-slate-600">Category</span>
-            <select
+            <input
               className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
               id="activity-edit-category"
-              onChange={(event) => setCategory(event.target.value as ActivityCategory)}
+              list="activity-edit-category-options"
+              onChange={(event) => setCategory(event.target.value)}
+              placeholder="Pick or type category"
               value={category}
-            >
-              {CATEGORY_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
+            />
+            <datalist id="activity-edit-category-options">
+              {categoryOptions.map((option) => (
+                <option key={option} value={option} />
               ))}
-            </select>
+            </datalist>
           </label>
 
           <div className="block">

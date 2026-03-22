@@ -5,7 +5,7 @@ export type InsightsRangeDays = 7 | 30 | 90
 
 export type ActivitySource = 'text' | 'voice' | 'preset' | 'auto'
 
-export type ActivityCategory =
+export type BaseActivityCategory =
   | 'meal'
   | 'caffeine'
   | 'sleep'
@@ -16,6 +16,8 @@ export type ActivityCategory =
   | 'self_care'
   | 'errand'
   | 'transit'
+
+export type ActivityCategory = BaseActivityCategory | string
 
 export type FirestoreTimestamp = Timestamp | FieldValue
 
@@ -101,8 +103,8 @@ export interface DailyStatsDoc {
   totalActivities: number
   totalMinutes: number
   pointInTimeCount: number
-  categoryCounts: Record<ActivityCategory, number>
-  categoryMinutes: Record<ActivityCategory, number>
+  categoryCounts: Record<BaseActivityCategory, number>
+  categoryMinutes: Record<BaseActivityCategory, number>
   moodCount: number
   moodAverage: number | null
   energyCount: number
@@ -125,8 +127,8 @@ export interface WeeklyStatsDoc {
   averageDailyMinutes: number
   moodAverage: number | null
   energyAverage: number | null
-  categoryCounts: Record<ActivityCategory, number>
-  categoryMinutes: Record<ActivityCategory, number>
+  categoryCounts: Record<BaseActivityCategory, number>
+  categoryMinutes: Record<BaseActivityCategory, number>
   currentStreakDays: number
   bestStreakDays: number
   updatedAt?: FirestoreTimestamp
