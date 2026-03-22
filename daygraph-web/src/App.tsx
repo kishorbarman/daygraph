@@ -14,18 +14,13 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import LoginScreen from './components/auth/LoginScreen'
+import ChatTab from './components/chat/ChatTab'
 import AppShell from './components/layout/AppShell'
 import InsightsTab from './components/insights/InsightsTab'
 import LoadingState from './components/shared/LoadingState'
 import TodayTab from './components/today/TodayTab'
 import { auth, db } from './firebase'
 import type { AppTab, UserProfileDoc } from './types'
-
-const tabDescriptions: Record<AppTab, string> = {
-  Today: 'Quick logging and timeline UI are next in Phase 1.',
-  Insights: 'Dashboard cards and trend visualizations are planned for Phase 3.',
-  Chat: 'AI assistant with deep research and charts is planned for Phase 4.',
-}
 
 async function upsertUserProfile(user: User) {
   const userRef = doc(db, `users/${user.uid}`)
@@ -135,12 +130,11 @@ function App() {
       return <InsightsTab user={user} />
     }
 
-    return (
-      <main className="border-y border-slate-200 bg-white px-4 py-4 sm:rounded-xl sm:border sm:p-5">
-        <h2 className="mb-2 text-lg font-medium text-slate-900">{activeTab}</h2>
-        <p className="text-sm text-slate-600">{tabDescriptions[activeTab]}</p>
-      </main>
-    )
+    if (activeTab === 'Chat') {
+      return <ChatTab user={user} />
+    }
+
+    return null
   }
 
   return (

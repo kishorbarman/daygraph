@@ -22,7 +22,17 @@ interface ActivityEditModalProps {
     activity: string
     category: ActivityCategory
     durationMinutes: number | null
+    timestamp: Date
   }) => Promise<void>
+}
+
+function toDateTimeLocalValue(value: Date) {
+  const year = value.getFullYear()
+  const month = `${value.getMonth() + 1}`.padStart(2, '0')
+  const day = `${value.getDate()}`.padStart(2, '0')
+  const hours = `${value.getHours()}`.padStart(2, '0')
+  const minutes = `${value.getMinutes()}`.padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
 function ActivityEditModal({
@@ -36,23 +46,45 @@ function ActivityEditModal({
   const [durationMinutes, setDurationMinutes] = useState<number | null>(
     activity.durationMinutes,
   )
+  const [timestampInput, setTimestampInput] = useState(
+    toDateTimeLocalValue(activity.timestamp.toDate()),
+  )
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const timestampLabel = useMemo(
-    () => activity.timestamp.toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    () =>
+      activity.timestamp.toDate().toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
     [activity.timestamp],
   )
+  const maxDateTimeValue = useMemo(() => toDateTimeLocalValue(new Date()), [])
 
   const handleSave = async () => {
     setIsSaving(true)
     setErrorMessage(null)
     try {
+      const parsedTimestamp = new Date(timestampInput)
+      if (Number.isNaN(parsedTimestamp.getTime())) {
+        setErrorMessage('Please choose a valid date and time.')
+        return
+      }
+
+      if (parsedTimestamp.getTime() > Date.now()) {
+        setErrorMessage('Please choose a time in the past.')
+        return
+      }
+
       await onSave({
         activity: activityText,
         category,
         durationMinutes,
+        timestamp: parsedTimestamp,
       })
     } catch (error) {
       console.error('Failed to save activity edits:', error)
@@ -125,6 +157,18 @@ function ActivityEditModal({
               placeholder="Leave empty for point-in-time"
               type="number"
               value={durationMinutes ?? ''}
+            />
+          </label>
+
+          <label className="block" htmlFor="activity-edit-time">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Date and time</span>
+            <input
+              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              id="activity-edit-time"
+              max={maxDateTimeValue}
+              onChange={(event) => setTimestampInput(event.target.value)}
+              type="datetime-local"
+              value={timestampInput}
             />
           </label>
         </div>

@@ -135,3 +135,75 @@ export interface WeeklyStatsDoc {
 export interface WeeklyStatsRecord extends WeeklyStatsDoc {
   id: string
 }
+
+export type ChatRole = 'user' | 'assistant'
+
+export interface ChatChartSeries {
+  name: string
+  values: number[]
+}
+
+export interface ChatChartConfig {
+  type: 'line' | 'bar'
+  title: string
+  labels: string[]
+  series: ChatChartSeries[]
+}
+
+export interface ChatGroundedFrom {
+  tier: string
+  activities: number
+  dailyStats: number
+  weeklyStats: number
+  model: string
+}
+
+export interface GetChatResponseInput {
+  message: string
+  sessionId?: string
+  deepResearch?: boolean
+}
+
+export interface GetChatResponseOutput {
+  sessionId: string
+  answer: string
+  confidence: 'low' | 'medium' | 'high'
+  suggestedFollowups: string[]
+  chart: ChatChartConfig | null
+  groundedFrom: ChatGroundedFrom
+  latencyMs: number
+}
+
+export interface ChatMessage {
+  id: string
+  role: ChatRole
+  text: string
+  createdAt: number
+  confidence?: 'low' | 'medium' | 'high'
+  chart?: ChatChartConfig | null
+  followups?: string[]
+}
+
+export interface SuggestionDraftActivity {
+  activity: string
+  category: ActivityCategory
+  subCategory: string
+  isPointInTime: boolean
+  durationMinutes: number | null
+}
+
+export interface SuggestionItem {
+  id: string
+  title: string
+  reason: string
+  actionText: string
+  activityDraft: SuggestionDraftActivity
+}
+
+export interface GetSuggestionInput {
+  dismissedIds: string[]
+}
+
+export interface GetSuggestionOutput {
+  suggestion: SuggestionItem | null
+}

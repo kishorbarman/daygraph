@@ -107,20 +107,30 @@ Phase 3 status (updated March 21, 2026):
 
 Entry criteria: Phase 3 exit gate passed.
 
-| ID | Step | Depends On | Deliverable | Done When |
-|---|---|---|---|---|
-| P4-01 | Implement `getChatResponse` callable with context tiers | P3-09 | Chat backend pipeline | Data-grounded responses returned |
-| P4-02 | Build Chat UI (messages/input/session state) | P4-01 | Chat tab end-to-end | Multi-turn session works |
-| P4-03 | Implement chart config extraction/validation | P4-01 | Safe chart payload parser | Invalid chart payloads fail gracefully |
-| P4-04 | Build InlineChart renderer | P4-03 | Chat-embedded charts | Valid charts render correctly |
-| P4-05 | Add Deep Research mode toggle | P4-01,P4-02 | Research mode UX/backend flag | Long-form mode operational |
-| P4-06 | Implement `getSuggestion` callable | P3-09 | Suggestion engine API | Returns one suggestion or null |
-| P4-07 | Build SuggestionCard + dismiss/one-tap log | P4-06 | Today proactive card | No repeated dismissed suggestion |
-| P4-08 | Implement scheduled `weeklyRecap` narrative | P3-02,P4-01 | Weekly AI recap storage | Recap saved to weekly stats |
-| P4-09 | Add telemetry for AI latency/cost/errors | P4-01,P4-06 | Observability dashboard events | Alertable metrics emitted |
+| ID | Step | Depends On | Deliverable | Done When | Status |
+|---|---|---|---|---|---|
+| P4-01 | Implement `getChatResponse` callable with context tiers | P3-09 | Chat backend pipeline | Data-grounded responses returned | Completed |
+| P4-02 | Build Chat UI (messages/input/session state) | P4-01 | Chat tab end-to-end | Multi-turn session works | Completed |
+| P4-03 | Implement chart config extraction/validation | P4-01 | Safe chart payload parser | Invalid chart payloads fail gracefully | Completed |
+| P4-04 | Build InlineChart renderer | P4-03 | Chat-embedded charts | Valid charts render correctly | Completed |
+| P4-05 | Add Deep Research mode toggle | P4-01,P4-02 | Research mode UX/backend flag | Long-form mode operational | Completed |
+| P4-06 | Implement `getSuggestion` callable | P3-09 | Suggestion engine API | Returns one suggestion or null | Completed |
+| P4-07 | Build SuggestionCard + dismiss/one-tap log | P4-06 | Today proactive card | No repeated dismissed suggestion | Completed |
+| P4-08 | Implement scheduled `weeklyRecap` narrative | P3-02,P4-01 | Weekly AI recap storage | Recap saved to weekly stats | Completed |
+| P4-09 | Add telemetry for AI latency/cost/errors | P4-01,P4-06 | Observability dashboard events | Alertable metrics emitted | Completed |
 
 Phase 4 exit gate:
 - Chat and proactive suggestions work reliably with observability and guardrails.
+
+Phase 4 status (updated March 21, 2026):
+- Exit gate met.
+- Chat backend callable (`getChatResponse`) shipped with context tiers, deep-research mode flag support, and grounded response contract.
+- Chat tab shipped with multi-turn state, follow-ups, safe chart payload extraction/validation, and inline chart rendering.
+- Suggestion backend callable (`getSuggestion`) shipped with dismissal-aware dedupe and nullable response behavior.
+- Today proactive suggestion card shipped with dismiss and one-tap logging flows.
+- Scheduled weekly recap job (`weeklyRecap`) shipped to persist recap narrative into `weeklyStats`.
+- AI telemetry collection shipped for chat and suggestion paths (latency, estimated token/cost, and error/fallback status).
+- Phase 4 changes deployed to Firebase Functions + Hosting (`daygraph-49867`) and local verification passed (`npm run verify:phase1`).
 
 ---
 

@@ -24,6 +24,8 @@ const ACTIVITY_CATEGORIES = [
 ]
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.1-pro'
+const GEMINI_RESEARCH_MODEL = process.env.GEMINI_RESEARCH_MODEL || GEMINI_CHAT_MODEL
 
 const CATEGORY_KEYWORDS = {
   meal: ['breakfast', 'lunch', 'dinner', 'meal', 'snack'],
@@ -612,6 +614,253 @@ async function parseWithGemini({ text, timezone, correctionRules, recentActiviti
   return sanitized
 }
 
+async function callGeminiJson({
+  model,
+  prompt,
+  schema,
+  temperature = 0.2,
+}) {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    throw new Error('Missing GEMINI_API_KEY')
+  }
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature,
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+        },
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Gemini HTTP ${response.status}: ${body}`)
+  }
+
+  const payload = await response.json()
+  const textPart = payload?.candidates?.[0]?.content?.parts?.find(
+    (part) => typeof part?.text === 'string',
+  )
+
+  if (!textPart?.text) {
+    throw new Error('Gemini response did not include JSON text content')
+  }
+
+  return JSON.parse(textPart.text)
+}
+
+function chooseChatContextTier(message, deepResearch) {
+  if (deepResearch) return 'deep'
+
+  const normalized = message.toLowerCase()
+  if (message.length < 80) return 'quick'
+
+  if (
+    normalized.includes('trend') ||
+    normalized.includes('pattern') ||
+    normalized.includes('week') ||
+    normalized.includes('month') ||
+    normalized.includes('why')
+  ) {
+    return 'standard'
+  }
+
+  return 'quick'
+}
+
+async function loadChatContext(uid, tier) {
+  const limits = {
+    quick: { activities: 12, dailyStats: 7, weeklyStats: 2 },
+    standard: { activities: 30, dailyStats: 30, weeklyStats: 6 },
+    deep: { activities: 60, dailyStats: 90, weeklyStats: 12 },
+  }[tier]
+
+  const [activitiesSnap, dailyStatsSnap, weeklyStatsSnap] = await Promise.all([
+    db
+      .collection(`users/${uid}/activities`)
+      .orderBy('timestamp', 'desc')
+      .limit(limits.activities)
+      .get(),
+    db
+      .collection(`users/${uid}/dailyStats`)
+      .orderBy('date', 'desc')
+      .limit(limits.dailyStats)
+      .get(),
+    db
+      .collection(`users/${uid}/weeklyStats`)
+      .orderBy('weekStartDate', 'desc')
+      .limit(limits.weeklyStats)
+      .get(),
+  ])
+
+  return {
+    activities: activitiesSnap.docs.map((docSnap) => {
+      const data = docSnap.data()
+      return {
+        activity: data.activity || '',
+        category: data.category || 'leisure',
+        timestamp: data.timestamp?.toDate?.()?.toISOString?.() || null,
+        durationMinutes:
+          typeof data.durationMinutes === 'number' ? data.durationMinutes : null,
+        mood: typeof data.mood === 'number' ? data.mood : null,
+        energy: typeof data.energy === 'number' ? data.energy : null,
+      }
+    }),
+    dailyStats: dailyStatsSnap.docs.map((docSnap) => docSnap.data()),
+    weeklyStats: weeklyStatsSnap.docs.map((docSnap) => docSnap.data()),
+  }
+}
+
+function buildFallbackChatResponse(message, context, tier) {
+  const latestWeek = context.weeklyStats[0]
+  const latestDay = context.dailyStats[0]
+
+  const summary = []
+  if (latestDay) {
+    summary.push(
+      `Today you logged ${latestDay.totalActivities || 0} items and ${latestDay.totalMinutes || 0} active minutes.`,
+    )
+  }
+  if (latestWeek) {
+    summary.push(
+      `This week is at ${latestWeek.totalActivities || 0} logs with a current streak of ${latestWeek.currentStreakDays || 0} days.`,
+    )
+  }
+
+  return {
+    answer: [
+      `You asked: "${message}"`,
+      summary.join(' '),
+      'I could not reach AI right now, but your latest tracked stats are shown above.',
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    chart: null,
+    confidence: 'medium',
+    suggestedFollowups: [
+      'Show my top categories this week.',
+      'How does today compare with my average?',
+    ],
+    groundedFrom: {
+      tier,
+      activities: context.activities.length,
+      dailyStats: context.dailyStats.length,
+      weeklyStats: context.weeklyStats.length,
+      model: 'fallback',
+    },
+  }
+}
+
+function buildSuggestionCandidates({ todayStats, recentActivities }) {
+  const suggestions = []
+  const todayCount = typeof todayStats?.totalActivities === 'number' ? todayStats.totalActivities : 0
+  const todayExerciseMinutes = todayStats?.categoryMinutes?.exercise || 0
+  const todayMealCount = todayStats?.categoryCounts?.meal || 0
+  const recentCaffeineCount = recentActivities.filter(
+    (item) => item.category === 'caffeine',
+  ).length
+
+  if (todayCount < 3) {
+    suggestions.push({
+      id: 'complete-three-logs',
+      title: 'Add one more quick log',
+      reason: 'A few logs improve daily trend quality without extra effort.',
+      actionText: 'Log a quick check-in',
+      activityDraft: {
+        activity: 'Quick check-in',
+        category: 'self_care',
+        subCategory: 'check_in',
+        isPointInTime: true,
+        durationMinutes: null,
+      },
+    })
+  }
+
+  if (todayExerciseMinutes < 15) {
+    suggestions.push({
+      id: 'short-movement',
+      title: 'Take a short movement break',
+      reason: 'A 10-15 minute walk can improve energy patterns later in the day.',
+      actionText: 'Log a 15 min walk',
+      activityDraft: {
+        activity: '15 min walk',
+        category: 'exercise',
+        subCategory: 'walk',
+        isPointInTime: false,
+        durationMinutes: 15,
+      },
+    })
+  }
+
+  if (todayMealCount === 0) {
+    suggestions.push({
+      id: 'log-meal',
+      title: 'Log your next meal',
+      reason: 'Meal timing data often explains energy dips in the afternoon.',
+      actionText: 'Log meal',
+      activityDraft: {
+        activity: 'Meal',
+        category: 'meal',
+        subCategory: 'general',
+        isPointInTime: true,
+        durationMinutes: null,
+      },
+    })
+  }
+
+  if (recentCaffeineCount >= 3) {
+    suggestions.push({
+      id: 'hydrate-reset',
+      title: 'Hydration reset',
+      reason: 'You logged several caffeinated items recently. A water break may help.',
+      actionText: 'Log hydration break',
+      activityDraft: {
+        activity: 'Hydration break',
+        category: 'self_care',
+        subCategory: 'hydration',
+        isPointInTime: true,
+        durationMinutes: null,
+      },
+    })
+  }
+
+  return suggestions
+}
+
+function estimateTokenCount(text) {
+  if (typeof text !== 'string' || text.length === 0) return 0
+  return Math.ceil(text.length / 4)
+}
+
+function estimateCostUsd(inputTokens, outputTokens) {
+  const inputCost = inputTokens * 0.0000003
+  const outputCost = outputTokens * 0.0000006
+  return Number((inputCost + outputCost).toFixed(6))
+}
+
+async function recordAiTelemetry(uid, payload) {
+  try {
+    await db.collection(`users/${uid}/aiTelemetry`).add({
+      ...payload,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+  } catch (error) {
+    logger.warn('recordAiTelemetry failed', {
+      uid,
+      error: String(error),
+    })
+  }
+}
+
 async function parseActivities(text, context) {
   try {
     const parsed = await parseWithGemini({
@@ -645,6 +894,234 @@ async function parseActivities(text, context) {
     }
   }
 }
+
+exports.getChatResponse = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'You must be signed in to use chat.')
+  }
+
+  const message = typeof request.data?.message === 'string' ? request.data.message.trim() : ''
+  const deepResearch = request.data?.deepResearch === true
+  const sessionId =
+    typeof request.data?.sessionId === 'string' && request.data.sessionId.trim()
+      ? request.data.sessionId.trim()
+      : db.collection('_').doc().id
+
+  if (!message) {
+    throw new HttpsError('invalid-argument', 'Message is required.')
+  }
+  if (message.length > 3000) {
+    throw new HttpsError('invalid-argument', 'Message is too long.')
+  }
+
+  const startedAt = Date.now()
+  const tier = chooseChatContextTier(message, deepResearch)
+  const context = await loadChatContext(request.auth.uid, tier)
+
+  try {
+    const prompt = [
+      'You are DayGraph assistant.',
+      'Answer only using provided user data context.',
+      'Be calm, practical, and non-judgmental.',
+      `Context tier: ${tier}`,
+      `Deep research mode: ${deepResearch ? 'on' : 'off'}`,
+      `Recent activities JSON: ${JSON.stringify(context.activities)}`,
+      `Daily stats JSON: ${JSON.stringify(context.dailyStats)}`,
+      `Weekly stats JSON: ${JSON.stringify(context.weeklyStats)}`,
+      `User message: ${message}`,
+      'Return JSON with: answer (string), confidence (low|medium|high), suggestedFollowups (array string max 3), and optional chart (object or null).',
+      'If including chart, chart must include type(line|bar), title, labels(string[]), and series(array of {name, values:number[]}).',
+    ].join('\n\n')
+
+    const model = deepResearch ? GEMINI_RESEARCH_MODEL : GEMINI_CHAT_MODEL
+    const parsed = await callGeminiJson({
+      model,
+      prompt,
+      temperature: deepResearch ? 0.3 : 0.2,
+      schema: {
+        type: 'OBJECT',
+        properties: {
+          answer: { type: 'STRING' },
+          confidence: { type: 'STRING' },
+          suggestedFollowups: {
+            type: 'ARRAY',
+            items: { type: 'STRING' },
+          },
+          chart: {
+            type: 'OBJECT',
+            nullable: true,
+            properties: {
+              type: { type: 'STRING' },
+              title: { type: 'STRING' },
+              labels: {
+                type: 'ARRAY',
+                items: { type: 'STRING' },
+              },
+              series: {
+                type: 'ARRAY',
+                items: {
+                  type: 'OBJECT',
+                  properties: {
+                    name: { type: 'STRING' },
+                    values: {
+                      type: 'ARRAY',
+                      items: { type: 'NUMBER' },
+                    },
+                  },
+                  required: ['name', 'values'],
+                },
+              },
+            },
+          },
+        },
+        required: ['answer', 'confidence', 'suggestedFollowups'],
+      },
+    })
+
+    const elapsedMs = Date.now() - startedAt
+    const outputText = typeof parsed.answer === 'string' ? parsed.answer : ''
+    const inputTokens = estimateTokenCount(prompt)
+    const outputTokens = estimateTokenCount(outputText)
+
+    await recordAiTelemetry(request.auth.uid, {
+      endpoint: 'getChatResponse',
+      status: 'success',
+      latencyMs: elapsedMs,
+      tier,
+      model,
+      inputTokens,
+      outputTokens,
+      estimatedCostUsd: estimateCostUsd(inputTokens, outputTokens),
+      deepResearch,
+      error: null,
+    })
+
+    return {
+      sessionId,
+      answer: outputText,
+      confidence: ['low', 'medium', 'high'].includes(parsed.confidence)
+        ? parsed.confidence
+        : 'medium',
+      suggestedFollowups: Array.isArray(parsed.suggestedFollowups)
+        ? parsed.suggestedFollowups.slice(0, 3).filter((item) => typeof item === 'string')
+        : [],
+      chart: parsed.chart && typeof parsed.chart === 'object' ? parsed.chart : null,
+      groundedFrom: {
+        tier,
+        activities: context.activities.length,
+        dailyStats: context.dailyStats.length,
+        weeklyStats: context.weeklyStats.length,
+        model,
+      },
+      latencyMs: elapsedMs,
+    }
+  } catch (error) {
+    logger.error('getChatResponse failed, using fallback', {
+      uid: request.auth.uid,
+      error: String(error),
+      tier,
+    })
+
+    const elapsedMs = Date.now() - startedAt
+    await recordAiTelemetry(request.auth.uid, {
+      endpoint: 'getChatResponse',
+      status: 'fallback',
+      latencyMs: elapsedMs,
+      tier,
+      model: 'fallback',
+      inputTokens: estimateTokenCount(message),
+      outputTokens: 0,
+      estimatedCostUsd: 0,
+      deepResearch,
+      error: String(error),
+    })
+
+    const fallback = buildFallbackChatResponse(message, context, tier)
+    return {
+      sessionId,
+      ...fallback,
+      latencyMs: elapsedMs,
+    }
+  }
+})
+
+exports.getSuggestion = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'You must be signed in to get suggestions.')
+  }
+
+  const uid = request.auth.uid
+  const startedAt = Date.now()
+
+  try {
+    const dismissedIds = Array.isArray(request.data?.dismissedIds)
+      ? request.data.dismissedIds.filter((item) => typeof item === 'string')
+      : []
+
+    const [todayStatsSnap, recentActivitiesSnap, dismissalSnap] = await Promise.all([
+      db
+        .collection(`users/${uid}/dailyStats`)
+        .orderBy('date', 'desc')
+        .limit(1)
+        .get(),
+      db
+        .collection(`users/${uid}/activities`)
+        .orderBy('timestamp', 'desc')
+        .limit(24)
+        .get(),
+      db
+        .collection(`users/${uid}/suggestionDismissals`)
+        .orderBy('dismissedAt', 'desc')
+        .limit(20)
+        .get()
+        .catch(() => null),
+    ])
+
+    const todayStats = todayStatsSnap.docs[0]?.data() || null
+    const recentActivities = recentActivitiesSnap.docs.map((docSnap) => docSnap.data())
+    const remotelyDismissed = dismissalSnap
+      ? dismissalSnap.docs
+          .map((docSnap) => docSnap.data()?.suggestionId)
+          .filter((item) => typeof item === 'string')
+      : []
+
+    const dismissedSet = new Set([...dismissedIds, ...remotelyDismissed])
+    const candidates = buildSuggestionCandidates({ todayStats, recentActivities })
+    const nextSuggestion =
+      candidates.find((candidate) => !dismissedSet.has(candidate.id)) || null
+
+    await recordAiTelemetry(uid, {
+      endpoint: 'getSuggestion',
+      status: nextSuggestion ? 'success' : 'empty',
+      latencyMs: Date.now() - startedAt,
+      tier: 'heuristic',
+      model: 'heuristic',
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostUsd: 0,
+      deepResearch: false,
+      error: null,
+    })
+
+    return {
+      suggestion: nextSuggestion,
+    }
+  } catch (error) {
+    await recordAiTelemetry(uid, {
+      endpoint: 'getSuggestion',
+      status: 'error',
+      latencyMs: Date.now() - startedAt,
+      tier: 'heuristic',
+      model: 'heuristic',
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostUsd: 0,
+      deepResearch: false,
+      error: String(error),
+    })
+    throw new HttpsError('internal', 'Unable to compute suggestion right now.')
+  }
+})
 
 exports.parseActivityPreview = onCall({ region: 'us-central1' }, async (request) => {
   if (!request.auth) {
@@ -825,6 +1302,99 @@ exports.nightlyTrendCompute = onSchedule(
           await recomputeWeeklyStatsForUser(uid, timezone)
         } catch (error) {
           logger.error('nightlyTrendCompute user failure', {
+            uid,
+            error: String(error),
+          })
+        }
+      }),
+    )
+  },
+)
+
+exports.weeklyRecap = onSchedule(
+  {
+    schedule: 'every monday 03:20',
+    timeZone: 'Etc/UTC',
+    region: 'us-central1',
+  },
+  async () => {
+    const usersSnapshot = await db.collection('users').get()
+
+    await Promise.all(
+      usersSnapshot.docs.map(async (userDoc) => {
+        const uid = userDoc.id
+        try {
+          const weeklySnap = await db
+            .collection(`users/${uid}/weeklyStats`)
+            .orderBy('weekStartDate', 'desc')
+            .limit(1)
+            .get()
+
+          const weeklyDoc = weeklySnap.docs[0]
+          if (!weeklyDoc) return
+
+          const weeklyData = weeklyDoc.data()
+          const prompt = [
+            'You are DayGraph weekly recap assistant.',
+            'Create a concise, calm weekly narrative.',
+            `Weekly stats JSON: ${JSON.stringify(weeklyData)}`,
+            'Return JSON with summary (string) and highlights (array of up to 3 strings).',
+          ].join('\n\n')
+
+          let recap
+          try {
+            recap = await callGeminiJson({
+              model: GEMINI_CHAT_MODEL,
+              prompt,
+              temperature: 0.3,
+              schema: {
+                type: 'OBJECT',
+                properties: {
+                  summary: { type: 'STRING' },
+                  highlights: {
+                    type: 'ARRAY',
+                    items: { type: 'STRING' },
+                  },
+                },
+                required: ['summary', 'highlights'],
+              },
+            })
+          } catch (error) {
+            recap = {
+              summary:
+                `You logged ${weeklyData.totalActivities || 0} activities and ` +
+                `${weeklyData.totalMinutes || 0} minutes this week.`,
+              highlights: [
+                `Current streak: ${weeklyData.currentStreakDays || 0} days`,
+                `Best streak: ${weeklyData.bestStreakDays || 0} days`,
+              ],
+            }
+            logger.warn('weeklyRecap using fallback text', {
+              uid,
+              error: String(error),
+            })
+          }
+
+          await weeklyDoc.ref.set(
+            {
+              recap: {
+                summary:
+                  typeof recap.summary === 'string'
+                    ? recap.summary
+                    : 'Weekly recap unavailable.',
+                highlights: Array.isArray(recap.highlights)
+                  ? recap.highlights
+                      .filter((item) => typeof item === 'string')
+                      .slice(0, 3)
+                  : [],
+                model: GEMINI_CHAT_MODEL,
+                generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              },
+            },
+            { merge: true },
+          )
+        } catch (error) {
+          logger.error('weeklyRecap user failure', {
             uid,
             error: String(error),
           })

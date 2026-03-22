@@ -14,6 +14,7 @@ import type {
   ActivitySource,
   ParsedActivityDraft,
   Preset,
+  SuggestionDraftActivity,
 } from '../types'
 
 interface CreateManualActivityInput {
@@ -41,6 +42,7 @@ interface SaveActivityEditsInput {
     activity: string
     category: ActivityCategory
     durationMinutes: number | null
+    timestamp: Date
   }
 }
 
@@ -191,7 +193,7 @@ export async function saveActivityEdits({
   next,
 }: SaveActivityEditsInput) {
   const activityRef = doc(db, `users/${uid}/activities/${activityId}`)
-  const timestamp = previous.timestamp.toDate()
+  const timestamp = next.timestamp
   const endTimestamp =
     next.durationMinutes === null
       ? null
@@ -204,6 +206,7 @@ export async function saveActivityEdits({
       next.category === previous.category ? previous.subCategory : 'general',
     durationMinutes: next.durationMinutes,
     isPointInTime: next.durationMinutes === null,
+    timestamp,
     endTimestamp,
     editedAt: serverTimestamp(),
   })
@@ -239,4 +242,24 @@ export async function saveActivityMoodEnergy(
     energy,
     editedAt: serverTimestamp(),
   })
+}
+
+export async function createSuggestedActivity(
+  uid: string,
+  draft: SuggestionDraftActivity,
+) {
+  await addDoc(
+    collection(db, `users/${uid}/activities`),
+    createBaseActivityPayload({
+      uid,
+      activity: draft.activity,
+      category: draft.category,
+      subCategory: draft.subCategory,
+      source: 'auto',
+      isPointInTime: draft.isPointInTime,
+      durationMinutes:
+        typeof draft.durationMinutes === 'number' ? draft.durationMinutes : undefined,
+      tags: ['suggestion'],
+    }),
+  )
 }
