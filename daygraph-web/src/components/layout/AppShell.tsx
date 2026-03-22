@@ -11,6 +11,8 @@ interface AppShellProps {
   onTabChange: (tab: AppTab) => void
   onSignOut: () => Promise<void>
   onResetData: () => Promise<void>
+  theme: 'light' | 'dark'
+  onThemeToggle: () => void
   children: ReactNode
 }
 
@@ -20,14 +22,19 @@ function AppShell({
   onResetData,
   onTabChange,
   onSignOut,
+  onThemeToggle,
+  theme,
   children,
 }: AppShellProps) {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col bg-slate-50">
       <Header
         displayName={user.displayName ?? 'there'}
+        email={user.email}
         onResetData={onResetData}
         onSignOut={onSignOut}
+        onThemeToggle={onThemeToggle}
+        theme={theme}
       />
       <InstallAppBanner />
       <TabBar activeTab={activeTab} onTabChange={onTabChange} />

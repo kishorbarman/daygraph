@@ -25,6 +25,7 @@ import type { AppTab, UserProfileDoc } from './types'
 const TodayTab = lazy(() => import('./components/today/TodayTab'))
 const InsightsTab = lazy(() => import('./components/insights/InsightsTab'))
 const ChatTab = lazy(() => import('./components/chat/ChatTab'))
+type Theme = 'light' | 'dark'
 
 async function upsertUserProfile(user: User) {
   const userRef = doc(db, `users/${user.uid}`)
@@ -61,6 +62,10 @@ function App() {
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [theme, setTheme] = useState<Theme>(() => {
+    const savedTheme = localStorage.getItem('daygraph-theme')
+    return savedTheme === 'dark' ? 'dark' : 'light'
+  })
 
   useEffect(() => {
     let isMounted = true
@@ -100,6 +105,11 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('daygraph-theme', theme)
+  }, [theme])
+
   const handleSignIn = async () => {
     const provider = new GoogleAuthProvider()
     setIsSigningIn(true)
@@ -132,6 +142,10 @@ function App() {
       console.error('Failed to reset user data:', error)
       window.alert('Unable to reset your data right now. Please try again.')
     }
+  }
+
+  const handleThemeToggle = () => {
+    setTheme((current) => (current === 'light' ? 'dark' : 'light'))
   }
 
   if (!authReady) {
@@ -182,6 +196,8 @@ function App() {
       onResetData={handleResetData}
       onSignOut={handleSignOut}
       onTabChange={setActiveTab}
+      onThemeToggle={handleThemeToggle}
+      theme={theme}
       user={user}
     >
       {renderActiveTab()}

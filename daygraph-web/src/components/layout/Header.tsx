@@ -2,12 +2,24 @@ import { useState } from 'react'
 
 interface HeaderProps {
   displayName: string
+  email?: string | null
   onSignOut: () => Promise<void>
   onResetData: () => Promise<void>
+  theme: 'light' | 'dark'
+  onThemeToggle: () => void
 }
 
-function Header({ displayName, onSignOut, onResetData }: HeaderProps) {
+function Header({
+  displayName,
+  email,
+  onSignOut,
+  onResetData,
+  onThemeToggle,
+  theme,
+}: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const initial = (displayName || email || 'U').trim().charAt(0).toUpperCase()
+  const isDark = theme === 'dark'
 
   return (
     <>
@@ -61,34 +73,65 @@ function Header({ displayName, onSignOut, onResetData }: HeaderProps) {
             </button>
           </div>
 
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                {initial}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-900">{displayName}</p>
+                <p className="truncate text-xs text-slate-600">{email ?? 'Signed in'}</p>
+              </div>
+            </div>
+          </div>
+
           <nav className="space-y-1">
+            <button
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+              onClick={onThemeToggle}
+              type="button"
+            >
+              <span aria-hidden="true" className="text-base leading-none">
+                {isDark ? '☀️' : '🌙'}
+              </span>
+              <span>{isDark ? 'Light mode' : 'Dark mode'}</span>
+            </button>
             <a
-              className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
               href="/privacy.html"
               rel="noreferrer"
               target="_blank"
             >
-              Privacy
+              <span aria-hidden="true" className="text-base leading-none">
+                🔒
+              </span>
+              <span>Privacy</span>
             </a>
             <button
-              className="block w-full rounded-md px-3 py-2 text-left text-sm text-amber-800 hover:bg-amber-50"
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
               onClick={() => {
                 setIsMenuOpen(false)
                 void onResetData()
               }}
               type="button"
             >
-              Reset data
+              <span aria-hidden="true" className="text-base leading-none">
+                ↺
+              </span>
+              <span>Reset data</span>
             </button>
             <button
-              className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
               onClick={() => {
                 setIsMenuOpen(false)
                 void onSignOut()
               }}
               type="button"
             >
-              Sign out
+              <span aria-hidden="true" className="text-base leading-none">
+                ⎋
+              </span>
+              <span>Sign out</span>
             </button>
           </nav>
         </aside>

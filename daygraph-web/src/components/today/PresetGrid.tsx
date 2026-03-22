@@ -11,6 +11,8 @@ interface PresetGridProps {
   onPresetClick: (preset: Preset) => Promise<void>
 }
 
+type DurationUnit = 'min' | 'hr'
+
 const CATEGORY_OPTIONS: ActivityCategory[] = [
   'meal',
   'caffeine',
@@ -32,6 +34,22 @@ function toSlug(value: string) {
     .slice(0, 40)
 }
 
+function durationMinutesFromValue(value: string, unit: DurationUnit) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined
+  return unit === 'hr' ? Math.round(parsed * 60) : Math.round(parsed)
+}
+
+function durationEditorDefaults(minutes?: number) {
+  if (typeof minutes !== 'number' || minutes <= 0) {
+    return { value: '30', unit: 'min' as DurationUnit }
+  }
+  if (minutes % 60 === 0) {
+    return { value: `${minutes / 60}`, unit: 'hr' as DurationUnit }
+  }
+  return { value: `${minutes}`, unit: 'min' as DurationUnit }
+}
+
 function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
   const [presets, setPresets] = useState<Preset[]>(DEFAULT_PRESETS.slice(0, 4))
   const [activePresetId, setActivePresetId] = useState<string | null>(null)
@@ -43,12 +61,14 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
   const [customCategory, setCustomCategory] = useState<ActivityCategory>('leisure')
   const [customPointInTime, setCustomPointInTime] = useState(true)
   const [customDuration, setCustomDuration] = useState('30')
+  const [customDurationUnit, setCustomDurationUnit] = useState<DurationUnit>('min')
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null)
   const [editLabel, setEditLabel] = useState('')
   const [editEmoji, setEditEmoji] = useState('✨')
   const [editCategory, setEditCategory] = useState<ActivityCategory>('leisure')
   const [editPointInTime, setEditPointInTime] = useState(true)
   const [editDuration, setEditDuration] = useState('30')
+  const [editDurationUnit, setEditDurationUnit] = useState<DurationUnit>('min')
 
   useEffect(() => {
     const unsubscribe = subscribeUserPresets(
@@ -117,11 +137,9 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
       return
     }
 
-    const durationParsed = Number(customDuration)
-    const normalizedDuration =
-      customPointInTime || !Number.isFinite(durationParsed) || durationParsed <= 0
-        ? undefined
-        : Math.round(durationParsed)
+    const normalizedDuration = customPointInTime
+      ? undefined
+      : durationMinutesFromValue(customDuration, customDurationUnit)
 
     const customPreset: Preset = {
       id: `custom-${slug}-${Date.now().toString(36)}`,
@@ -140,6 +158,7 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
     setCustomCategory('leisure')
     setCustomPointInTime(true)
     setCustomDuration('30')
+    setCustomDurationUnit('min')
   }
 
   const loadEditorFromPreset = (preset: Preset) => {
@@ -148,7 +167,9 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
     setEditEmoji(preset.emoji || '✨')
     setEditCategory(preset.category)
     setEditPointInTime(preset.isPointInTime)
-    setEditDuration(`${preset.defaultDuration ?? 30}`)
+    const durationDefaults = durationEditorDefaults(preset.defaultDuration)
+    setEditDuration(durationDefaults.value)
+    setEditDurationUnit(durationDefaults.unit)
   }
 
   const saveEditedPreset = async () => {
@@ -160,11 +181,9 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
       return
     }
 
-    const durationParsed = Number(editDuration)
-    const normalizedDuration =
-      editPointInTime || !Number.isFinite(durationParsed) || durationParsed <= 0
-        ? undefined
-        : Math.round(durationParsed)
+    const normalizedDuration = editPointInTime
+      ? undefined
+      : durationMinutesFromValue(editDuration, editDurationUnit)
 
     const next = presets.map((preset) => {
       if (preset.id !== editingPresetId) return preset
@@ -296,15 +315,26 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
                           </option>
                         ))}
                       </select>
-                      <input
-                        className="rounded border border-slate-300 px-2 py-1.5 text-xs"
-                        disabled={editPointInTime}
-                        min={1}
-                        onChange={(event) => setEditDuration(event.target.value)}
-                        placeholder="Duration (min)"
-                        type="number"
-                        value={editDuration}
-                      />
+                      <div className="flex items-center overflow-hidden rounded border border-slate-300 bg-white">
+                        <input
+                          className="w-full border-0 px-2 py-1.5 text-xs outline-none disabled:bg-slate-100"
+                          disabled={editPointInTime}
+                          min={1}
+                          onChange={(event) => setEditDuration(event.target.value)}
+                          placeholder="Duration"
+                          type="number"
+                          value={editDuration}
+                        />
+                        <select
+                          className="w-16 border-l border-slate-300 bg-slate-50 px-1 py-1.5 text-xs disabled:bg-slate-100"
+                          disabled={editPointInTime}
+                          onChange={(event) => setEditDurationUnit(event.target.value as DurationUnit)}
+                          value={editDurationUnit}
+                        >
+                          <option value="min">min</option>
+                          <option value="hr">hr</option>
+                        </select>
+                      </div>
                     </div>
                     <label className="inline-flex items-center gap-2 text-xs text-slate-700">
                       <input
@@ -376,15 +406,26 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
                   </option>
                 ))}
               </select>
-              <input
-                className="rounded border border-slate-300 px-2 py-1.5 text-xs"
-                disabled={customPointInTime}
-                min={1}
-                onChange={(event) => setCustomDuration(event.target.value)}
-                placeholder="Duration (min)"
-                type="number"
-                value={customDuration}
-              />
+              <div className="flex items-center overflow-hidden rounded border border-slate-300 bg-white">
+                <input
+                  className="w-full border-0 px-2 py-1.5 text-xs outline-none disabled:bg-slate-100"
+                  disabled={customPointInTime}
+                  min={1}
+                  onChange={(event) => setCustomDuration(event.target.value)}
+                  placeholder="Duration"
+                  type="number"
+                  value={customDuration}
+                />
+                <select
+                  className="w-16 border-l border-slate-300 bg-slate-50 px-1 py-1.5 text-xs disabled:bg-slate-100"
+                  disabled={customPointInTime}
+                  onChange={(event) => setCustomDurationUnit(event.target.value as DurationUnit)}
+                  value={customDurationUnit}
+                >
+                  <option value="min">min</option>
+                  <option value="hr">hr</option>
+                </select>
+              </div>
             </div>
             <label className="inline-flex items-center gap-2 text-xs text-slate-700">
               <input
