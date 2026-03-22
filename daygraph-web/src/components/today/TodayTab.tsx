@@ -88,6 +88,10 @@ function TodayTab({ user }: TodayTabProps) {
     [user.uid],
   )
   const isViewingToday = formatDateKey(selectedDate) === formatDateKey(new Date())
+  const selectedDateLabel = selectedDate.toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+  })
 
   const latestUnratedActivity = useMemo(
     () =>
@@ -271,8 +275,25 @@ function TodayTab({ user }: TodayTabProps) {
         {isViewingToday ? (
           <RawQueueStatus onRetry={handleRawRetry} rawItems={rawItems} />
         ) : null}
-        <InputBar onSubmit={handleTextLog} />
-        <PresetGrid onPresetClick={handlePresetLog} uid={user.uid} />
+        <InputBar
+          canLog={isViewingToday}
+          disabledMessage={
+            isViewingToday
+              ? undefined
+              : `Viewing ${selectedDateLabel}. Use “Jump to Today” in Timeline to log new activity.`
+          }
+          onSubmit={handleTextLog}
+        />
+        <PresetGrid
+          canLog={isViewingToday}
+          disabledMessage={
+            isViewingToday
+              ? undefined
+              : `Quick logs are disabled for ${selectedDateLabel}. Jump to Today to add new entries.`
+          }
+          onPresetClick={handlePresetLog}
+          uid={user.uid}
+        />
         <Timeline
           activityDateKeys={monthActivityDayKeys}
           activities={activities}

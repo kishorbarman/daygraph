@@ -9,6 +9,8 @@ import {
 interface PresetGridProps {
   uid: string
   onPresetClick: (preset: Preset) => Promise<void>
+  canLog: boolean
+  disabledMessage?: string
 }
 
 type DurationUnit = 'min' | 'hr'
@@ -50,7 +52,12 @@ function durationEditorDefaults(minutes?: number) {
   return { value: `${minutes}`, unit: 'min' as DurationUnit }
 }
 
-function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
+function PresetGrid({
+  uid,
+  onPresetClick,
+  canLog,
+  disabledMessage,
+}: PresetGridProps) {
   const [presets, setPresets] = useState<Preset[]>(DEFAULT_PRESETS.slice(0, 4))
   const [activePresetId, setActivePresetId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -227,7 +234,7 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
           <button
             key={preset.id}
             className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-100"
-            disabled={activePresetId !== null || isManaging}
+            disabled={activePresetId !== null || isManaging || !canLog}
             onClick={() => void handlePresetClick(preset)}
             type="button"
           >
@@ -238,6 +245,9 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
           </button>
         ))}
       </div>
+      {!canLog && disabledMessage ? (
+        <p className="mt-2 text-xs text-amber-700">{disabledMessage}</p>
+      ) : null}
       {isManaging ? (
         <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <p className="text-xs text-slate-600">

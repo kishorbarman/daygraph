@@ -73,7 +73,7 @@ function OnboardingFlow({ uid, onComplete }: OnboardingFlowProps) {
           <>
             <h2 className="text-xl font-semibold text-slate-900">Choose quick presets</h2>
             <p className="mt-2 text-sm text-slate-600">
-              Pick the buttons you want on your Today screen.
+              Pick the buttons you want on your Log screen.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               {DEFAULT_PRESETS.map((preset) => {

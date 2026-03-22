@@ -75,7 +75,7 @@ function InsightsTab({ user }: InsightsTabProps) {
       {!isLoading && !errorMessage ? (
         stats.length === 0 ? (
           <EmptyState
-            message="Add a few activities in Today to unlock trend insights."
+            message="Add a few activities in Log to unlock trend insights."
             title="No insights yet"
           />
         ) : (

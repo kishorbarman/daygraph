@@ -26,7 +26,7 @@ function LoginScreen({ onSignIn, isSigningIn, errorMessage }: LoginScreenProps) 
         <div className="mt-6 grid grid-cols-1 gap-2 text-left sm:grid-cols-3">
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Today
+              Log
             </p>
             <p className="mt-1 text-xs text-slate-700">
               Text, voice, and presets for fast logging.
