@@ -1,6 +1,7 @@
 import type { FieldValue, Timestamp } from 'firebase/firestore'
 
 export type AppTab = 'Today' | 'Insights' | 'Chat'
+export type InsightsRangeDays = 7 | 30 | 90
 
 export type ActivitySource = 'text' | 'voice' | 'preset' | 'auto'
 
@@ -92,4 +93,45 @@ export interface ActivityRawRecord {
   parsedActivityIds?: string[]
   createdAt: Timestamp
   updatedAt?: Timestamp
+}
+
+export interface DailyStatsDoc {
+  date: string
+  timezone: string
+  totalActivities: number
+  totalMinutes: number
+  pointInTimeCount: number
+  categoryCounts: Record<ActivityCategory, number>
+  categoryMinutes: Record<ActivityCategory, number>
+  moodCount: number
+  moodAverage: number | null
+  energyCount: number
+  energyAverage: number | null
+  updatedAt?: FirestoreTimestamp
+}
+
+export interface DailyStatsRecord extends DailyStatsDoc {
+  id: string
+}
+
+export interface WeeklyStatsDoc {
+  weekStartDate: string
+  weekEndDate: string
+  timezone: string
+  totalActivities: number
+  totalMinutes: number
+  daysTracked: number
+  averageDailyActivities: number
+  averageDailyMinutes: number
+  moodAverage: number | null
+  energyAverage: number | null
+  categoryCounts: Record<ActivityCategory, number>
+  categoryMinutes: Record<ActivityCategory, number>
+  currentStreakDays: number
+  bestStreakDays: number
+  updatedAt?: FirestoreTimestamp
+}
+
+export interface WeeklyStatsRecord extends WeeklyStatsDoc {
+  id: string
 }

@@ -1,6 +1,7 @@
 const admin = require('firebase-admin')
 const { onCall, HttpsError } = require('firebase-functions/v2/https')
-const { onDocumentCreated } = require('firebase-functions/v2/firestore')
+const { onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore')
+const { onSchedule } = require('firebase-functions/v2/scheduler')
 const logger = require('firebase-functions/logger')
 
 if (admin.apps.length === 0) {
@@ -35,6 +36,310 @@ const CATEGORY_KEYWORDS = {
   self_care: ['meditate', 'journaling', 'doctor', 'self care', 'grooming'],
   errand: ['grocery', 'groceries', 'chores', 'errand'],
   transit: ['drive', 'commute', 'travel', 'train', 'flight'],
+}
+
+function formatDateKeyInTimezone(date, timezone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const year = parts.find((part) => part.type === 'year')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  const day = parts.find((part) => part.type === 'day')?.value
+
+  if (!year || !month || !day) {
+    throw new Error('Unable to format date key for timezone')
+  }
+
+  return `${year}-${month}-${day}`
+}
+
+function getTimezoneOffsetMs(date, timezone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+
+  const year = Number(parts.find((part) => part.type === 'year')?.value || '0')
+  const month = Number(parts.find((part) => part.type === 'month')?.value || '1')
+  const day = Number(parts.find((part) => part.type === 'day')?.value || '1')
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value || '0')
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value || '0')
+  const second = Number(parts.find((part) => part.type === 'second')?.value || '0')
+
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second)
+  return asUtc - date.getTime()
+}
+
+function zonedDateKeyStartToUtc(dateKey, timezone) {
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+
+  const utcGuess = Date.UTC(year, month - 1, day, 0, 0, 0, 0)
+  const offset = getTimezoneOffsetMs(new Date(utcGuess), timezone)
+  return new Date(utcGuess - offset)
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+  const base = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0))
+  base.setUTCDate(base.getUTCDate() + days)
+  const yyyy = base.getUTCFullYear()
+  const mm = `${base.getUTCMonth() + 1}`.padStart(2, '0')
+  const dd = `${base.getUTCDate()}`.padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+function parseTimestampToDate(value) {
+  if (!value) return null
+  if (typeof value.toDate === 'function') return value.toDate()
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+async function getUserTimezone(uid) {
+  const userSnap = await db.doc(`users/${uid}`).get()
+  return userSnap.exists ? userSnap.data()?.timezone || 'UTC' : 'UTC'
+}
+
+async function recomputeDailyStats(uid, timezone, dateKey) {
+  const start = zonedDateKeyStartToUtc(dateKey, timezone)
+  const nextStart = zonedDateKeyStartToUtc(addDaysToDateKey(dateKey, 1), timezone)
+  const dailyRef = db.doc(`users/${uid}/dailyStats/${dateKey}`)
+  const activitiesRef = db.collection(`users/${uid}/activities`)
+  const snapshot = await activitiesRef
+    .where('timestamp', '>=', admin.firestore.Timestamp.fromDate(start))
+    .where('timestamp', '<', admin.firestore.Timestamp.fromDate(nextStart))
+    .get()
+
+  if (snapshot.empty) {
+    await dailyRef.delete().catch(() => null)
+    return
+  }
+
+  const categoryCounts = Object.fromEntries(
+    ACTIVITY_CATEGORIES.map((category) => [category, 0]),
+  )
+  const categoryMinutes = Object.fromEntries(
+    ACTIVITY_CATEGORIES.map((category) => [category, 0]),
+  )
+
+  let totalActivities = 0
+  let totalMinutes = 0
+  let pointInTimeCount = 0
+  let moodTotal = 0
+  let moodCount = 0
+  let energyTotal = 0
+  let energyCount = 0
+  let firstActivityAt = null
+  let lastActivityAt = null
+
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data()
+    const category = ACTIVITY_CATEGORIES.includes(data.category)
+      ? data.category
+      : 'leisure'
+    const minutes =
+      typeof data.durationMinutes === 'number' && data.durationMinutes > 0
+        ? Math.round(data.durationMinutes)
+        : 0
+    const timestamp = parseTimestampToDate(data.timestamp)
+
+    totalActivities += 1
+    totalMinutes += minutes
+    categoryCounts[category] += 1
+    categoryMinutes[category] += minutes
+
+    if (data.isPointInTime === true || minutes === 0) {
+      pointInTimeCount += 1
+    }
+
+    if (typeof data.mood === 'number') {
+      moodTotal += data.mood
+      moodCount += 1
+    }
+
+    if (typeof data.energy === 'number') {
+      energyTotal += data.energy
+      energyCount += 1
+    }
+
+    if (timestamp) {
+      if (!firstActivityAt || timestamp < firstActivityAt) firstActivityAt = timestamp
+      if (!lastActivityAt || timestamp > lastActivityAt) lastActivityAt = timestamp
+    }
+  })
+
+  await dailyRef.set(
+    {
+      date: dateKey,
+      timezone,
+      totalActivities,
+      totalMinutes,
+      pointInTimeCount,
+      categoryCounts,
+      categoryMinutes,
+      moodCount,
+      moodAverage: moodCount > 0 ? Number((moodTotal / moodCount).toFixed(2)) : null,
+      energyCount,
+      energyAverage: energyCount > 0 ? Number((energyTotal / energyCount).toFixed(2)) : null,
+      firstActivityAt: firstActivityAt
+        ? admin.firestore.Timestamp.fromDate(firstActivityAt)
+        : null,
+      lastActivityAt: lastActivityAt
+        ? admin.firestore.Timestamp.fromDate(lastActivityAt)
+        : null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  )
+}
+
+function getWeekStartDateKey(dateKey) {
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+  const utcDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0))
+  const dayOfWeek = utcDate.getUTCDay()
+  const daysFromMonday = (dayOfWeek + 6) % 7
+  return addDaysToDateKey(dateKey, -daysFromMonday)
+}
+
+async function recomputeWeeklyStatsForUser(uid, timezone, now = new Date()) {
+  const todayKey = formatDateKeyInTimezone(now, timezone)
+  const weekStartDate = getWeekStartDateKey(todayKey)
+  const weekEndDate = addDaysToDateKey(weekStartDate, 6)
+  const weeklyRef = db.doc(`users/${uid}/weeklyStats/${weekStartDate}`)
+
+  const weekDailyDocs = await Promise.all(
+    Array.from({ length: 7 }).map(async (_, index) => {
+      const date = addDaysToDateKey(weekStartDate, index)
+      const snap = await db.doc(`users/${uid}/dailyStats/${date}`).get()
+      return snap.exists ? snap.data() : null
+    }),
+  )
+
+  const categoryCounts = Object.fromEntries(
+    ACTIVITY_CATEGORIES.map((category) => [category, 0]),
+  )
+  const categoryMinutes = Object.fromEntries(
+    ACTIVITY_CATEGORIES.map((category) => [category, 0]),
+  )
+
+  let totalActivities = 0
+  let totalMinutes = 0
+  let moodTotal = 0
+  let moodCount = 0
+  let energyTotal = 0
+  let energyCount = 0
+  let daysTracked = 0
+
+  weekDailyDocs.forEach((daily) => {
+    if (!daily) return
+
+    if (typeof daily.totalActivities === 'number' && daily.totalActivities > 0) {
+      daysTracked += 1
+    }
+
+    totalActivities +=
+      typeof daily.totalActivities === 'number' ? daily.totalActivities : 0
+    totalMinutes += typeof daily.totalMinutes === 'number' ? daily.totalMinutes : 0
+    moodTotal +=
+      typeof daily.moodAverage === 'number' && typeof daily.moodCount === 'number'
+        ? daily.moodAverage * daily.moodCount
+        : 0
+    moodCount += typeof daily.moodCount === 'number' ? daily.moodCount : 0
+    energyTotal +=
+      typeof daily.energyAverage === 'number' && typeof daily.energyCount === 'number'
+        ? daily.energyAverage * daily.energyCount
+        : 0
+    energyCount += typeof daily.energyCount === 'number' ? daily.energyCount : 0
+
+    ACTIVITY_CATEGORIES.forEach((category) => {
+      const dailyCount =
+        typeof daily.categoryCounts?.[category] === 'number'
+          ? daily.categoryCounts[category]
+          : 0
+      const dailyMinutes =
+        typeof daily.categoryMinutes?.[category] === 'number'
+          ? daily.categoryMinutes[category]
+          : 0
+
+      categoryCounts[category] += dailyCount
+      categoryMinutes[category] += dailyMinutes
+    })
+  })
+
+  const streakEndKey = addDaysToDateKey(todayKey, -1)
+  const oldestStreakKey = addDaysToDateKey(streakEndKey, -179)
+  const streakSnapshot = await db
+    .collection(`users/${uid}/dailyStats`)
+    .where('date', '>=', oldestStreakKey)
+    .where('date', '<=', streakEndKey)
+    .orderBy('date', 'asc')
+    .get()
+
+  const activeDays = new Set(
+    streakSnapshot.docs
+      .map((docSnap) => docSnap.data())
+      .filter((data) => typeof data.totalActivities === 'number' && data.totalActivities > 0)
+      .map((data) => data.date),
+  )
+
+  let currentStreakDays = 0
+  let cursor = streakEndKey
+  while (activeDays.has(cursor)) {
+    currentStreakDays += 1
+    cursor = addDaysToDateKey(cursor, -1)
+  }
+
+  let bestStreakDays = 0
+  let running = 0
+  for (let i = 0; i < 180; i += 1) {
+    const date = addDaysToDateKey(oldestStreakKey, i)
+    if (activeDays.has(date)) {
+      running += 1
+      if (running > bestStreakDays) bestStreakDays = running
+    } else {
+      running = 0
+    }
+  }
+
+  await weeklyRef.set(
+    {
+      weekStartDate,
+      weekEndDate,
+      timezone,
+      totalActivities,
+      totalMinutes,
+      daysTracked,
+      averageDailyActivities: Number((totalActivities / 7).toFixed(2)),
+      averageDailyMinutes: Number((totalMinutes / 7).toFixed(2)),
+      moodAverage: moodCount > 0 ? Number((moodTotal / moodCount).toFixed(2)) : null,
+      energyAverage: energyCount > 0 ? Number((energyTotal / energyCount).toFixed(2)) : null,
+      categoryCounts,
+      categoryMinutes,
+      currentStreakDays,
+      bestStreakDays,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  )
 }
 
 function inferDurationMinutes(text) {
@@ -469,5 +774,62 @@ exports.onActivityRawCreate = onDocumentCreated(
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       })
     }
+  },
+)
+
+exports.onActivityWriteAggregateDaily = onDocumentWritten(
+  {
+    document: 'users/{uid}/activities/{activityId}',
+    region: 'us-central1',
+  },
+  async (event) => {
+    const uid = event.params.uid
+    const timezone = await getUserTimezone(uid)
+    const beforeData = event.data?.before?.data()
+    const afterData = event.data?.after?.data()
+    const dateKeys = new Set()
+
+    const beforeTimestamp = parseTimestampToDate(beforeData?.timestamp)
+    if (beforeTimestamp) {
+      dateKeys.add(formatDateKeyInTimezone(beforeTimestamp, timezone))
+    }
+
+    const afterTimestamp = parseTimestampToDate(afterData?.timestamp)
+    if (afterTimestamp) {
+      dateKeys.add(formatDateKeyInTimezone(afterTimestamp, timezone))
+    }
+
+    await Promise.all(
+      Array.from(dateKeys).map(async (dateKey) => {
+        await recomputeDailyStats(uid, timezone, dateKey)
+      }),
+    )
+  },
+)
+
+exports.nightlyTrendCompute = onSchedule(
+  {
+    schedule: 'every day 02:15',
+    timeZone: 'Etc/UTC',
+    region: 'us-central1',
+  },
+  async () => {
+    const usersSnapshot = await db.collection('users').get()
+
+    await Promise.all(
+      usersSnapshot.docs.map(async (userDoc) => {
+        const uid = userDoc.id
+        const timezone = userDoc.data()?.timezone || 'UTC'
+
+        try {
+          await recomputeWeeklyStatsForUser(uid, timezone)
+        } catch (error) {
+          logger.error('nightlyTrendCompute user failure', {
+            uid,
+            error: String(error),
+          })
+        }
+      }),
+    )
   },
 )

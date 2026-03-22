@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore'
 import LoginScreen from './components/auth/LoginScreen'
 import AppShell from './components/layout/AppShell'
+import InsightsTab from './components/insights/InsightsTab'
 import LoadingState from './components/shared/LoadingState'
 import TodayTab from './components/today/TodayTab'
 import { auth, db } from './firebase'
@@ -128,6 +129,10 @@ function App() {
   const renderActiveTab = () => {
     if (activeTab === 'Today') {
       return <TodayTab user={user} />
+    }
+
+    if (activeTab === 'Insights') {
+      return <InsightsTab user={user} />
     }
 
     return (

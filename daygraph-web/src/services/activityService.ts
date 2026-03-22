@@ -225,3 +225,18 @@ export async function deleteActivityEntry(uid: string, activityId: string) {
   const activityRef = doc(db, `users/${uid}/activities/${activityId}`)
   await deleteDoc(activityRef)
 }
+
+export async function saveActivityMoodEnergy(
+  uid: string,
+  activityId: string,
+  mood: number,
+  energy: number,
+) {
+  const activityRef = doc(db, `users/${uid}/activities/${activityId}`)
+
+  await updateDoc(activityRef, {
+    mood,
+    energy,
+    editedAt: serverTimestamp(),
+  })
+}

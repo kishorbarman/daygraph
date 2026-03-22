@@ -78,20 +78,28 @@ Phase 2 status (updated March 21, 2026):
 
 Entry criteria: Phase 2 exit gate passed.
 
-| ID | Step | Depends On | Deliverable | Done When |
-|---|---|---|---|---|
-| P3-01 | Implement activity->`dailyStats` aggregation trigger | P2-09 | Daily aggregates pipeline | Category counts/minutes accurate |
-| P3-02 | Implement scheduled `nightlyTrendCompute` -> `weeklyStats` | P3-01 | Weekly rollup/streak job | Weekly docs generated correctly |
-| P3-03 | Build date range selector (7/30/90) | P1-10 | Shared filter control | All insights react to filter |
-| P3-04 | Build Daily Summary card | P3-01,P3-03 | Today vs average view | Values match aggregates |
-| P3-05 | Build Time Breakdown chart | P3-01,P3-03 | Stacked category chart | Chart totals reconcile with data |
-| P3-06 | Build Mood/Energy trend chart + threshold gating | P3-01,P3-03 | Dual line chart | Hidden/shown per data threshold |
-| P3-07 | Build Streak cards | P3-02 | Streak panel | Non-gamified streak display |
-| P3-08 | Add Mood/Energy prompt flow in Today | P3-01 | Prompt + writes | Trigger cadence behaves correctly |
-| P3-09 | Phase 3 analytics validation tests | P3-01..P3-08 | Aggregate correctness tests | Timezone and DST tests pass |
+| ID | Step | Depends On | Deliverable | Done When | Status |
+|---|---|---|---|---|---|
+| P3-01 | Implement activity->`dailyStats` aggregation trigger | P2-09 | Daily aggregates pipeline | Category counts/minutes accurate | Completed |
+| P3-02 | Implement scheduled `nightlyTrendCompute` -> `weeklyStats` | P3-01 | Weekly rollup/streak job | Weekly docs generated correctly | Completed |
+| P3-03 | Build date range selector (7/30/90) | P1-10 | Shared filter control | All insights react to filter | Completed |
+| P3-04 | Build Daily Summary card | P3-01,P3-03 | Today vs average view | Values match aggregates | Completed |
+| P3-05 | Build Time Breakdown chart | P3-01,P3-03 | Stacked category chart | Chart totals reconcile with data | Completed |
+| P3-06 | Build Mood/Energy trend chart + threshold gating | P3-01,P3-03 | Dual line chart | Hidden/shown per data threshold | Completed |
+| P3-07 | Build Streak cards | P3-02 | Streak panel | Non-gamified streak display | Completed |
+| P3-08 | Add Mood/Energy prompt flow in Today | P3-01 | Prompt + writes | Trigger cadence behaves correctly | Completed |
+| P3-09 | Phase 3 analytics validation tests | P3-01..P3-08 | Aggregate correctness tests | Timezone and DST tests pass | Completed |
 
 Phase 3 exit gate:
 - Insights tab is fully functional with trustworthy aggregates and chart behavior.
+
+Phase 3 status (updated March 21, 2026):
+- Exit gate met.
+- `dailyStats` aggregation trigger and nightly `weeklyStats` trend/streak rollup are implemented in Cloud Functions.
+- Insights tab now ships 7/30/90 filtering, Daily Summary, Time Breakdown, Mood/Energy trend gating, and Streak cards.
+- Today tab now includes Mood/Energy prompt cadence and writes values back to activity records.
+- Phase 3 validation tests added for analytics metrics and date-key handling (including DST boundary cases).
+- Local verification passing (`npm run verify:phase1`) and local dev server validation completed.
 
 ---
 

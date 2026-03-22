@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { User } from 'firebase/auth'
 import {
   createActivitiesFromPreview,
@@ -6,6 +6,7 @@ import {
   createPresetActivity,
   deleteActivityEntry,
   retryRawActivityInput,
+  saveActivityMoodEnergy,
   saveActivityEdits,
 } from '../../services/activityService'
 import { parseActivityPreview } from '../../services/parseService'
@@ -24,9 +25,23 @@ import ParsePreviewModal from './ParsePreviewModal'
 import PresetGrid from './PresetGrid'
 import RawQueueStatus from './RawQueueStatus'
 import Timeline from './Timeline'
+import MoodEnergyPromptCard from './MoodEnergyPromptCard'
+import { formatDateKey } from '../../utils/insightsDate'
 
 interface TodayTabProps {
   user: User
+}
+
+function getStorage() {
+  if (
+    typeof globalThis !== 'undefined' &&
+    typeof globalThis.localStorage?.getItem === 'function' &&
+    typeof globalThis.localStorage?.setItem === 'function'
+  ) {
+    return globalThis.localStorage
+  }
+
+  return null
 }
 
 function TodayTab({ user }: TodayTabProps) {
@@ -38,6 +53,38 @@ function TodayTab({ user }: TodayTabProps) {
   const [selectedActivity, setSelectedActivity] = useState<ActivityRecord | null>(
     null,
   )
+  const [promptRefreshKey, setPromptRefreshKey] = useState(0)
+
+  const todayPromptStorageKey = useMemo(
+    () => `daygraph:mood-prompt:${user.uid}:${formatDateKey(new Date())}`,
+    [user.uid],
+  )
+
+  const latestUnratedActivity = useMemo(
+    () =>
+      [...activities]
+        .reverse()
+        .find((item) => item.mood === null || item.energy === null) ?? null,
+    [activities],
+  )
+  const dismissedForCount = (() => {
+    void promptRefreshKey
+    const storage = getStorage()
+    const cached = storage?.getItem(todayPromptStorageKey)
+    if (!cached) return -1
+    try {
+      const parsed = JSON.parse(cached) as { dismissedForCount?: number }
+      return parsed.dismissedForCount ?? -1
+    } catch {
+      return -1
+    }
+  })()
+
+  const shouldShowMoodPrompt =
+    latestUnratedActivity !== null &&
+    activities.length >= 3 &&
+    activities.length % 3 === 0 &&
+    dismissedForCount !== activities.length
 
   const handleTextLog = async (text: string) => {
     try {
@@ -91,9 +138,45 @@ function TodayTab({ user }: TodayTabProps) {
     await retryRawActivityInput(user.uid, item.id, item.input, item.source)
   }
 
+  const handleMoodPromptDismiss = () => {
+    const storage = getStorage()
+    const cached = storage?.getItem(todayPromptStorageKey)
+    let parsed: { dismissedForCount?: number } = {}
+    if (cached) {
+      try {
+        parsed = JSON.parse(cached) as { dismissedForCount?: number }
+      } catch {
+        parsed = {}
+      }
+    }
+    storage?.setItem(
+      todayPromptStorageKey,
+      JSON.stringify({ ...parsed, dismissedForCount: activities.length }),
+    )
+    setPromptRefreshKey((prev) => prev + 1)
+  }
+
+  const handleMoodPromptSave = async (input: { mood: number; energy: number }) => {
+    if (!latestUnratedActivity) return
+
+    await saveActivityMoodEnergy(
+      user.uid,
+      latestUnratedActivity.id,
+      input.mood,
+      input.energy,
+    )
+    setPromptRefreshKey((prev) => prev + 1)
+  }
+
   return (
     <>
       <div className="space-y-3 sm:space-y-4">
+        {shouldShowMoodPrompt && latestUnratedActivity ? (
+          <MoodEnergyPromptCard
+            onDismiss={handleMoodPromptDismiss}
+            onSave={handleMoodPromptSave}
+          />
+        ) : null}
         <RawQueueStatus onRetry={handleRawRetry} rawItems={rawItems} />
         <Timeline
           activities={activities}
