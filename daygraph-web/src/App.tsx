@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { User } from 'firebase/auth'
 import {
   GoogleAuthProvider,
@@ -14,13 +15,15 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import LoginScreen from './components/auth/LoginScreen'
-import ChatTab from './components/chat/ChatTab'
 import AppShell from './components/layout/AppShell'
-import InsightsTab from './components/insights/InsightsTab'
+import OnboardingFlow from './components/onboarding/OnboardingFlow'
 import LoadingState from './components/shared/LoadingState'
-import TodayTab from './components/today/TodayTab'
 import { auth, db } from './firebase'
 import type { AppTab, UserProfileDoc } from './types'
+
+const TodayTab = lazy(() => import('./components/today/TodayTab'))
+const InsightsTab = lazy(() => import('./components/insights/InsightsTab'))
+const ChatTab = lazy(() => import('./components/chat/ChatTab'))
 
 async function upsertUserProfile(user: User) {
   const userRef = doc(db, `users/${user.uid}`)
@@ -44,7 +47,10 @@ async function upsertUserProfile(user: User) {
     createdAt: serverTimestamp(),
   }
 
-  await setDoc(userRef, newProfile)
+  await setDoc(userRef, {
+    ...newProfile,
+    onboardingCompleted: false,
+  })
 }
 
 function App() {
@@ -53,6 +59,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('Today')
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -68,6 +75,13 @@ function App() {
       }
 
       void upsertUserProfile(nextUser)
+        .then(async () => {
+          const userSnap = await getDoc(doc(db, `users/${nextUser.uid}`))
+          const onboardingCompleted = userSnap.data()?.onboardingCompleted === true
+          if (isMounted) {
+            setShowOnboarding(!onboardingCompleted)
+          }
+        })
         .catch((error) => {
           // Keep auth available even if profile upsert fails.
           console.error('Failed to sync user profile:', error)
@@ -122,16 +136,24 @@ function App() {
   }
 
   const renderActiveTab = () => {
+    const withSuspense = (content: ReactNode) => (
+      <Suspense
+        fallback={<LoadingState message="Loading tab..." title="Please wait" />}
+      >
+        {content}
+      </Suspense>
+    )
+
     if (activeTab === 'Today') {
-      return <TodayTab user={user} />
+      return withSuspense(<TodayTab user={user} />)
     }
 
     if (activeTab === 'Insights') {
-      return <InsightsTab user={user} />
+      return withSuspense(<InsightsTab user={user} />)
     }
 
     if (activeTab === 'Chat') {
-      return <ChatTab user={user} />
+      return withSuspense(<ChatTab user={user} />)
     }
 
     return null
@@ -145,6 +167,12 @@ function App() {
       user={user}
     >
       {renderActiveTab()}
+      {showOnboarding ? (
+        <OnboardingFlow
+          onComplete={() => setShowOnboarding(false)}
+          uid={user.uid}
+        />
+      ) : null}
     </AppShell>
   )
 }

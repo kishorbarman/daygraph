@@ -207,3 +207,28 @@ export interface GetSuggestionInput {
 export interface GetSuggestionOutput {
   suggestion: SuggestionItem | null
 }
+
+export interface CorrelationInsight {
+  id: string
+  metric: string
+  signal: number
+  sampleSize: number
+  confidence: 'low' | 'medium' | 'high'
+  direction: 'positive' | 'negative' | 'neutral'
+  strength: 'weak' | 'moderate' | 'strong'
+  insight: string
+}
+
+export interface GetCorrelationsInput {
+  days?: number
+}
+
+export interface GetCorrelationsOutput {
+  rangeDays: number
+  generatedAt: string
+  baseline: {
+    mood: number | null
+    energy: number | null
+  }
+  correlations: CorrelationInsight[]
+}

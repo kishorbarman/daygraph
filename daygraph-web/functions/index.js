@@ -861,6 +861,24 @@ async function recordAiTelemetry(uid, payload) {
   }
 }
 
+function toNumberOrNull(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function summarizeCorrelation(signal, sampleSize) {
+  const absSignal = Math.abs(signal)
+  let confidence = 'low'
+  if (sampleSize >= 12 && absSignal >= 0.35) confidence = 'high'
+  else if (sampleSize >= 7 && absSignal >= 0.2) confidence = 'medium'
+
+  return {
+    confidence,
+    direction: signal > 0 ? 'positive' : signal < 0 ? 'negative' : 'neutral',
+    strength:
+      absSignal >= 0.45 ? 'strong' : absSignal >= 0.25 ? 'moderate' : 'weak',
+  }
+}
+
 async function parseActivities(text, context) {
   try {
     const parsed = await parseWithGemini({
@@ -1120,6 +1138,158 @@ exports.getSuggestion = onCall({ region: 'us-central1' }, async (request) => {
       error: String(error),
     })
     throw new HttpsError('internal', 'Unable to compute suggestion right now.')
+  }
+})
+
+exports.getCorrelations = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'You must be signed in to view correlations.')
+  }
+
+  const uid = request.auth.uid
+  const days = Number(request.data?.days || 90)
+  const boundedDays = Number.isFinite(days) ? Math.min(180, Math.max(14, days)) : 90
+  const timezone = await getUserTimezone(uid)
+
+  const endDateKey = formatDateKeyInTimezone(new Date(), timezone)
+  const startDateKey = addDaysToDateKey(endDateKey, -(boundedDays - 1))
+
+  const [activitiesSnap, dailyStatsSnap] = await Promise.all([
+    db
+      .collection(`users/${uid}/activities`)
+      .where('timestamp', '>=', admin.firestore.Timestamp.fromDate(zonedDateKeyStartToUtc(startDateKey, timezone)))
+      .orderBy('timestamp', 'asc')
+      .get(),
+    db
+      .collection(`users/${uid}/dailyStats`)
+      .where('date', '>=', startDateKey)
+      .where('date', '<=', endDateKey)
+      .orderBy('date', 'asc')
+      .get(),
+  ])
+
+  const activities = activitiesSnap.docs.map((docSnap) => docSnap.data())
+  const dailyStats = dailyStatsSnap.docs.map((docSnap) => docSnap.data())
+
+  const moodByCategory = {}
+  const energyByCategory = {}
+  const moodValues = []
+  const energyValues = []
+
+  activities.forEach((entry) => {
+    const category = ACTIVITY_CATEGORIES.includes(entry.category)
+      ? entry.category
+      : 'leisure'
+    const mood = toNumberOrNull(entry.mood)
+    const energy = toNumberOrNull(entry.energy)
+
+    if (mood !== null) {
+      if (!moodByCategory[category]) moodByCategory[category] = []
+      moodByCategory[category].push(mood)
+      moodValues.push(mood)
+    }
+    if (energy !== null) {
+      if (!energyByCategory[category]) energyByCategory[category] = []
+      energyByCategory[category].push(energy)
+      energyValues.push(energy)
+    }
+  })
+
+  const baselineMood =
+    moodValues.length > 0
+      ? moodValues.reduce((sum, item) => sum + item, 0) / moodValues.length
+      : null
+  const baselineEnergy =
+    energyValues.length > 0
+      ? energyValues.reduce((sum, item) => sum + item, 0) / energyValues.length
+      : null
+
+  const categorySignals = ACTIVITY_CATEGORIES.map((category) => {
+    const categoryMood = moodByCategory[category] || []
+    const categoryEnergy = energyByCategory[category] || []
+    const moodSample = categoryMood.length
+    const energySample = categoryEnergy.length
+
+    const moodDelta =
+      baselineMood !== null && moodSample > 0
+        ? categoryMood.reduce((sum, item) => sum + item, 0) / moodSample - baselineMood
+        : 0
+    const energyDelta =
+      baselineEnergy !== null && energySample > 0
+        ? categoryEnergy.reduce((sum, item) => sum + item, 0) / energySample - baselineEnergy
+        : 0
+
+    const combinedSignal = Number(((moodDelta + energyDelta) / 2).toFixed(3))
+    const sampleSize = Math.max(moodSample, energySample)
+    const summary = summarizeCorrelation(combinedSignal, sampleSize)
+
+    return {
+      id: `category-${category}`,
+      metric: category,
+      signal: combinedSignal,
+      sampleSize,
+      confidence: summary.confidence,
+      direction: summary.direction,
+      strength: summary.strength,
+      insight:
+        sampleSize < 5
+          ? `Not enough ${category} samples yet for a reliable signal.`
+          : `${category} entries are ${summary.direction} with ${summary.strength} impact on mood/energy baseline.`,
+    }
+  })
+
+  const dailyPairs = dailyStats
+    .map((day) => ({
+      date: day.date,
+      mood: toNumberOrNull(day.moodAverage),
+      energy: toNumberOrNull(day.energyAverage),
+      activityCount: toNumberOrNull(day.totalActivities),
+      totalMinutes: toNumberOrNull(day.totalMinutes),
+    }))
+    .filter((day) => day.mood !== null || day.energy !== null)
+
+  const trendSignal = dailyPairs.length >= 7
+    ? Number(
+        (
+          dailyPairs.reduce((sum, item, index) => {
+            const moodPart = item.mood !== null ? item.mood - 3 : 0
+            const energyPart = item.energy !== null ? item.energy - 3 : 0
+            return sum + (moodPart + energyPart) * (index + 1)
+          }, 0) /
+          Math.max(1, dailyPairs.length * 10)
+        ).toFixed(3),
+      )
+    : 0
+
+  const trendSummary = summarizeCorrelation(trendSignal, dailyPairs.length)
+
+  const correlations = [
+    ...categorySignals.filter((entry) => entry.sampleSize >= 3),
+    {
+      id: 'overall-trend',
+      metric: 'overall',
+      signal: trendSignal,
+      sampleSize: dailyPairs.length,
+      confidence: trendSummary.confidence,
+      direction: trendSummary.direction,
+      strength: trendSummary.strength,
+      insight:
+        dailyPairs.length < 7
+          ? 'Not enough rated days yet to estimate overall trend.'
+          : `Overall mood/energy trend appears ${trendSummary.direction} with ${trendSummary.strength} signal.`,
+    },
+  ]
+    .sort((a, b) => Math.abs(b.signal) - Math.abs(a.signal))
+    .slice(0, 8)
+
+  return {
+    rangeDays: boundedDays,
+    generatedAt: new Date().toISOString(),
+    baseline: {
+      mood: baselineMood !== null ? Number(baselineMood.toFixed(2)) : null,
+      energy: baselineEnergy !== null ? Number(baselineEnergy.toFixed(2)) : null,
+    },
+    correlations,
   }
 })
 

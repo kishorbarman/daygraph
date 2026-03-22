@@ -262,7 +262,7 @@ function TodayTab({ user }: TodayTabProps) {
           isLoading={isLoading}
           onActivityClick={setSelectedActivity}
         />
-        <PresetGrid onPresetClick={handlePresetLog} />
+        <PresetGrid onPresetClick={handlePresetLog} uid={user.uid} />
         <InputBar onSubmit={handleTextLog} />
       </div>
       {previewResult ? (

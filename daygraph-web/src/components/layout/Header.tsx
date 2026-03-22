@@ -17,13 +17,23 @@ function Header({ displayName, onSignOut }: HeaderProps) {
         <p className="text-sm text-slate-600">Welcome, {displayName}</p>
         </div>
       </div>
-      <button
-        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
-        onClick={onSignOut}
-        type="button"
-      >
-        Sign out
-      </button>
+      <div className="flex items-center gap-2">
+        <a
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+          href="/privacy.html"
+          rel="noreferrer"
+          target="_blank"
+        >
+          Privacy
+        </a>
+        <button
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+          onClick={onSignOut}
+          type="button"
+        >
+          Sign out
+        </button>
+      </div>
     </header>
   )
 }

@@ -91,7 +91,7 @@ function ChatTab({ user }: ChatTabProps) {
       </section>
 
       <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="space-y-2">
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
           {messages.map((message) => (
             <article
               className={`rounded-xl px-3 py-2 ${
@@ -121,6 +121,7 @@ function ChatTab({ user }: ChatTabProps) {
             {followups.map((followup) => (
               <button
                 className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs text-slate-700 hover:bg-slate-200"
+                disabled={isSending}
                 key={followup}
                 onClick={() => void sendMessage(followup)}
                 type="button"
@@ -132,7 +133,7 @@ function ChatTab({ user }: ChatTabProps) {
         ) : null}
 
         <form
-          className="flex items-end gap-2"
+          className="sticky bottom-0 flex items-end gap-2 border-t border-slate-200 bg-white pt-3"
           onSubmit={(event) => {
             event.preventDefault()
             void sendMessage(input)
