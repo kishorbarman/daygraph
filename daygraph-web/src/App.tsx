@@ -142,18 +142,11 @@ function App() {
     setTheme((current) => (current === 'light' ? 'dark' : 'light'))
   }
 
-  if (!authReady) {
-    return (
-      <main className="mx-auto flex min-h-screen w-full max-w-4xl items-center justify-center bg-slate-50 sm:px-6">
-        <LoadingState message="Loading DayGraph..." title="Starting up" />
-      </main>
-    )
-  }
-
   if (!user) {
     return (
       <LoginScreen
         errorMessage={authErrorMessage}
+        isCheckingSession={!authReady}
         isSigningIn={isSigningIn}
         onSignIn={handleSignIn}
       />

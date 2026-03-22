@@ -1,10 +1,16 @@
 interface LoginScreenProps {
   onSignIn: () => Promise<void>
   isSigningIn: boolean
+  isCheckingSession: boolean
   errorMessage: string | null
 }
 
-function LoginScreen({ onSignIn, isSigningIn, errorMessage }: LoginScreenProps) {
+function LoginScreen({
+  onSignIn,
+  isSigningIn,
+  isCheckingSession,
+  errorMessage,
+}: LoginScreenProps) {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col items-center justify-center bg-slate-50 text-center sm:px-6">
       <div className="w-full border-y border-slate-200 bg-white px-5 py-10 sm:max-w-lg sm:rounded-2xl sm:border sm:p-8 sm:shadow-sm">
@@ -52,12 +58,21 @@ function LoginScreen({ onSignIn, isSigningIn, errorMessage }: LoginScreenProps) 
 
         <button
           className="mt-6 inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
-          disabled={isSigningIn}
+          disabled={isSigningIn || isCheckingSession}
           onClick={onSignIn}
           type="button"
         >
-          {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
+          {isCheckingSession
+            ? 'Checking saved session...'
+            : isSigningIn
+              ? 'Signing in...'
+              : 'Sign in with Google'}
         </button>
+        {isCheckingSession ? (
+          <p className="mt-3 text-xs text-slate-500">
+            Preparing your account...
+          </p>
+        ) : null}
         {errorMessage ? (
           <p className="mt-3 text-xs text-rose-600">{errorMessage}</p>
         ) : null}
