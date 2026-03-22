@@ -174,6 +174,14 @@ Entry criteria: MVP in stable dogfooding use.
 | P1 Wave | Smart gaps, caffeine analytics, weekend vs weekday, coaching mode, trend alerts, recurring templates | Stable MVP telemetry + UX feedback |
 | P2 Wave | Wearables/calendar/passive tracking, voice chat, proactive check-ins, export/share, benchmarks, custom dashboards | Data-source agreements + privacy review |
 
+Future roadmap additions (new):
+- Preset intelligence optimization:
+  - Dynamically reorder/surface most-likely presets per user based on recent habit, time-of-day, and day-of-week patterns.
+  - Evaluate default preset ordering decay windows and confidence thresholds for stable UX.
+- Recommendation quality improvement:
+  - Audit current "add one more quick log" heuristic path end-to-end (trigger logic, context, and user impact).
+  - Add recommendation evaluation loop (acceptance/dismissal outcomes) to improve suggestion relevance and reduce repetitive prompts.
+
 ## Test Plan by Phase
 
 1. P1: auth security, manual logging, timeline sync, empty/error states.

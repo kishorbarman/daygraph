@@ -102,10 +102,23 @@ export function subscribeUserPresets(
 }
 
 export async function saveUserPresets(uid: string, presets: Preset[]) {
+  const sanitized = presets.map((preset) => ({
+    id: preset.id,
+    emoji: preset.emoji,
+    label: preset.label,
+    category: preset.category,
+    subCategory: preset.subCategory,
+    isPointInTime: preset.isPointInTime,
+    usageCount: preset.usageCount ?? 0,
+    ...(typeof preset.defaultDuration === 'number'
+      ? { defaultDuration: preset.defaultDuration }
+      : {}),
+  }))
+
   await setDoc(
     doc(db, `users/${uid}/appConfig/presets`),
     {
-      items: presets,
+      items: sanitized,
       updatedAt: serverTimestamp(),
     },
     { merge: true },
