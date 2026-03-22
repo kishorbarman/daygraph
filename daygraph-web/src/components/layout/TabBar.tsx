@@ -1,6 +1,6 @@
 import type { AppTab } from '../../types'
 
-const APP_TABS: AppTab[] = ['Today', 'Insights', 'Chat']
+const APP_TABS: AppTab[] = ['Log', 'Insights', 'Chat']
 
 interface TabBarProps {
   activeTab: AppTab

@@ -33,6 +33,7 @@ const {
   retryRawActivityInputMock,
   saveActivityEditsMock,
   useTodayActivitiesMock,
+  useActivityMonthDaysMock,
   useTodayRawQueueMock,
 } = vi.hoisted(() => ({
   createActivitiesFromPreviewMock: vi.fn(),
@@ -49,6 +50,7 @@ const {
       errorMessage: string | null
     }
   >(),
+  useActivityMonthDaysMock: vi.fn(() => ({ dayKeys: [], isLoading: false })),
   useTodayRawQueueMock: vi.fn(() => ({ rawItems: [] })),
 }))
 
@@ -71,6 +73,10 @@ vi.mock('../../../hooks/useTodayActivities', () => ({
 
 vi.mock('../../../hooks/useTodayRawQueue', () => ({
   useTodayRawQueue: useTodayRawQueueMock,
+}))
+
+vi.mock('../../../hooks/useActivityMonthDays', () => ({
+  useActivityMonthDays: useActivityMonthDaysMock,
 }))
 
 describe('TodayTab', () => {
@@ -142,7 +148,7 @@ describe('TodayTab', () => {
     render(<TodayTab user={{ uid: 'u1' } as never} />)
 
     const timelineSection = screen
-      .getByRole('heading', { name: 'Today Timeline' })
+      .getByRole('heading', { name: 'Timeline' })
       .closest('section')
     expect(timelineSection).not.toBeNull()
     await user.click(within(timelineSection as HTMLElement).getByText('Breakfast'))
@@ -165,7 +171,7 @@ describe('TodayTab', () => {
     render(<TodayTab user={{ uid: 'u1' } as never} />)
 
     const timelineSection = screen
-      .getByRole('heading', { name: 'Today Timeline' })
+      .getByRole('heading', { name: 'Timeline' })
       .closest('section')
     expect(timelineSection).not.toBeNull()
     await user.click(within(timelineSection as HTMLElement).getByText('Breakfast'))

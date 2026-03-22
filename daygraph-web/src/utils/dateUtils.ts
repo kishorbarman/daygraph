@@ -1,16 +1,33 @@
 export function getTodayBounds() {
-  const now = new Date()
+  return getDayBounds(new Date())
+}
 
-  const start = new Date(now)
+export function getDayBounds(date: Date) {
+  const start = new Date(date)
   start.setHours(0, 0, 0, 0)
 
-  const end = new Date(now)
+  const end = new Date(date)
   end.setHours(23, 59, 59, 999)
 
   return { start, end }
 }
 
+export function getMonthBounds(date: Date) {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1)
+  start.setHours(0, 0, 0, 0)
+
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+  end.setHours(23, 59, 59, 999)
+
+  return { start, end }
+}
+
+export function startOfDay(date: Date) {
+  const next = new Date(date)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
 export function formatTime(date: Date) {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
-

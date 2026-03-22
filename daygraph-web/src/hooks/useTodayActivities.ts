@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import type { ActivityRecord } from '../types'
-import { getTodayBounds } from '../utils/dateUtils'
+import { getDayBounds, startOfDay } from '../utils/dateUtils'
 
 interface UseTodayActivitiesResult {
   activities: ActivityRecord[]
@@ -17,12 +17,19 @@ interface UseTodayActivitiesResult {
   errorMessage: string | null
 }
 
-export function useTodayActivities(uid: string): UseTodayActivitiesResult {
+export function useTodayActivities(
+  uid: string,
+  targetDate = new Date(),
+): UseTodayActivitiesResult {
   const [activities, setActivities] = useState<ActivityRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const { start, end } = useMemo(() => getTodayBounds(), [])
+  const normalizedDate = useMemo(() => startOfDay(targetDate), [targetDate])
+  const { start, end } = useMemo(
+    () => getDayBounds(normalizedDate),
+    [normalizedDate],
+  )
 
   useEffect(() => {
     const activitiesRef = collection(db, `users/${uid}/activities`)
@@ -46,8 +53,8 @@ export function useTodayActivities(uid: string): UseTodayActivitiesResult {
         setIsLoading(false)
       },
       (error) => {
-        console.error('Failed to subscribe to today activities:', error)
-        setErrorMessage('Unable to load today timeline right now.')
+        console.error('Failed to subscribe to activities:', error)
+        setErrorMessage('Unable to load timeline right now.')
         setIsLoading(false)
       },
     )

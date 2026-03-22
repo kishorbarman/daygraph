@@ -59,7 +59,7 @@ async function upsertUserProfile(user: User) {
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
-  const [activeTab, setActiveTab] = useState<AppTab>('Today')
+  const [activeTab, setActiveTab] = useState<AppTab>('Log')
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -130,7 +130,7 @@ function App() {
 
     try {
       await resetUserData()
-      setActiveTab('Today')
+      setActiveTab('Log')
       setShowOnboarding(true)
     } catch (error) {
       console.error('Failed to reset user data:', error)
@@ -169,7 +169,7 @@ function App() {
       </Suspense>
     )
 
-    if (activeTab === 'Today') {
+    if (activeTab === 'Log') {
       return withSuspense(<TodayTab user={user} />)
     }
 

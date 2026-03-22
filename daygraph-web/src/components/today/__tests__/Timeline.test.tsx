@@ -26,28 +26,36 @@ const mockActivity = {
   editedAt: null,
 } as unknown as ActivityRecord
 
+const selectedDate = new Date('2026-03-21T08:30:00Z')
+
 describe('Timeline', () => {
   it('renders loading state', () => {
     render(
       <Timeline
+        activityDateKeys={[]}
         activities={[]}
         errorMessage={null}
         isLoading
         onActivityClick={vi.fn()}
+        onDateChange={vi.fn()}
+        selectedDate={selectedDate}
       />,
     )
 
-    expect(screen.getByText('Today Timeline')).toBeInTheDocument()
+    expect(screen.getByText('Timeline')).toBeInTheDocument()
     expect(screen.getByText('Loading activities...')).toBeInTheDocument()
   })
 
   it('renders error state', () => {
     render(
       <Timeline
+        activityDateKeys={[]}
         activities={[]}
         errorMessage="Unable to load timeline"
         isLoading={false}
         onActivityClick={vi.fn()}
+        onDateChange={vi.fn()}
+        selectedDate={selectedDate}
       />,
     )
 
@@ -57,10 +65,13 @@ describe('Timeline', () => {
   it('renders activity entries', () => {
     render(
       <Timeline
+        activityDateKeys={['2026-03-21']}
         activities={[mockActivity]}
         errorMessage={null}
         isLoading={false}
         onActivityClick={vi.fn()}
+        onDateChange={vi.fn()}
+        selectedDate={selectedDate}
       />,
     )
 

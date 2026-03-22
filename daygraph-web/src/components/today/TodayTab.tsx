@@ -22,6 +22,7 @@ import type {
 } from '../../types'
 import { useTodayActivities } from '../../hooks/useTodayActivities'
 import { useTodayRawQueue } from '../../hooks/useTodayRawQueue'
+import { useActivityMonthDays } from '../../hooks/useActivityMonthDays'
 import ActivityEditModal from './ActivityEditModal'
 import InputBar from './InputBar'
 import ParsePreviewModal from './ParsePreviewModal'
@@ -31,6 +32,7 @@ import Timeline from './Timeline'
 import MoodEnergyPromptCard from './MoodEnergyPromptCard'
 import SuggestionCard from './SuggestionCard'
 import { formatDateKey } from '../../utils/insightsDate'
+import { startOfDay } from '../../utils/dateUtils'
 
 interface TodayTabProps {
   user: User
@@ -61,7 +63,12 @@ function readDismissedSuggestionIds(storageKey: string) {
 }
 
 function TodayTab({ user }: TodayTabProps) {
-  const { activities, isLoading, errorMessage } = useTodayActivities(user.uid)
+  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()))
+  const { activities, isLoading, errorMessage } = useTodayActivities(
+    user.uid,
+    selectedDate,
+  )
+  const { dayKeys: monthActivityDayKeys } = useActivityMonthDays(user.uid, selectedDate)
   const { rawItems } = useTodayRawQueue(user.uid)
   const [previewResult, setPreviewResult] =
     useState<ParseActivityPreviewResponse | null>(null)
@@ -80,6 +87,7 @@ function TodayTab({ user }: TodayTabProps) {
     () => `daygraph:suggestion-dismissed:${user.uid}`,
     [user.uid],
   )
+  const isViewingToday = formatDateKey(selectedDate) === formatDateKey(new Date())
 
   const latestUnratedActivity = useMemo(
     () =>
@@ -102,6 +110,7 @@ function TodayTab({ user }: TodayTabProps) {
   })()
 
   const shouldShowMoodPrompt =
+    isViewingToday &&
     latestUnratedActivity !== null &&
     activities.length >= 3 &&
     activities.length % 3 === 0 &&
@@ -111,6 +120,10 @@ function TodayTab({ user }: TodayTabProps) {
     let isCancelled = false
 
     const run = async () => {
+      if (!isViewingToday) {
+        setSuggestion(null)
+        return
+      }
       const dismissedIds = readDismissedSuggestionIds(suggestionDismissStorageKey)
 
       try {
@@ -131,7 +144,7 @@ function TodayTab({ user }: TodayTabProps) {
     return () => {
       isCancelled = true
     }
-  }, [activities.length, suggestionDismissStorageKey])
+  }, [activities.length, isViewingToday, suggestionDismissStorageKey])
 
   const handleTextLog = async (text: string) => {
     try {
@@ -255,14 +268,19 @@ function TodayTab({ user }: TodayTabProps) {
             onSave={handleMoodPromptSave}
           />
         ) : null}
-        <RawQueueStatus onRetry={handleRawRetry} rawItems={rawItems} />
+        {isViewingToday ? (
+          <RawQueueStatus onRetry={handleRawRetry} rawItems={rawItems} />
+        ) : null}
         <InputBar onSubmit={handleTextLog} />
         <PresetGrid onPresetClick={handlePresetLog} uid={user.uid} />
         <Timeline
+          activityDateKeys={monthActivityDayKeys}
           activities={activities}
           errorMessage={errorMessage}
           isLoading={isLoading}
           onActivityClick={setSelectedActivity}
+          onDateChange={setSelectedDate}
+          selectedDate={selectedDate}
         />
       </div>
       {previewResult ? (

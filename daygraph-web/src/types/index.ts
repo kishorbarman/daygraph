@@ -1,6 +1,6 @@
 import type { FieldValue, Timestamp } from 'firebase/firestore'
 
-export type AppTab = 'Today' | 'Insights' | 'Chat'
+export type AppTab = 'Log' | 'Insights' | 'Chat'
 export type InsightsRangeDays = 7 | 30 | 90
 
 export type ActivitySource = 'text' | 'voice' | 'preset' | 'auto'
