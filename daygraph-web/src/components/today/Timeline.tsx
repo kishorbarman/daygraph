@@ -25,6 +25,10 @@ function Timeline({
     return <ErrorState message={errorMessage} title="Today Timeline" />
   }
 
+  const sortedActivities = [...activities].sort(
+    (a, b) => b.timestamp.toDate().getTime() - a.timestamp.toDate().getTime(),
+  )
+
   return (
     <section className="border-y border-slate-200 bg-white px-4 py-4 sm:rounded-xl sm:border">
       <h3 className="mb-3 text-sm font-medium text-slate-700">Today Timeline</h3>
@@ -35,7 +39,7 @@ function Timeline({
         />
       ) : (
         <ol className="space-y-3">
-          {activities.map((activity) => (
+          {sortedActivities.map((activity) => (
             <li
               key={activity.id}
               className="cursor-pointer rounded-lg border border-slate-200 bg-slate-50 p-3 transition hover:border-slate-300 hover:bg-slate-100"
