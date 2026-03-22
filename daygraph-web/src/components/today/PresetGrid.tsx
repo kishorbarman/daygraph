@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Preset } from '../../types'
+import type { ActivityCategory, Preset } from '../../types'
 import {
   DEFAULT_PRESETS,
   saveUserPresets,
@@ -11,12 +11,44 @@ interface PresetGridProps {
   onPresetClick: (preset: Preset) => Promise<void>
 }
 
+const CATEGORY_OPTIONS: ActivityCategory[] = [
+  'meal',
+  'caffeine',
+  'sleep',
+  'exercise',
+  'social',
+  'work',
+  'leisure',
+  'self_care',
+  'errand',
+  'transit',
+]
+
+function toSlug(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+}
+
 function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
   const [presets, setPresets] = useState<Preset[]>(DEFAULT_PRESETS.slice(0, 4))
   const [activePresetId, setActivePresetId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isManaging, setIsManaging] = useState(false)
   const [isSavingConfig, setIsSavingConfig] = useState(false)
+  const [customLabel, setCustomLabel] = useState('')
+  const [customEmoji, setCustomEmoji] = useState('✨')
+  const [customCategory, setCustomCategory] = useState<ActivityCategory>('leisure')
+  const [customPointInTime, setCustomPointInTime] = useState(true)
+  const [customDuration, setCustomDuration] = useState('30')
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null)
+  const [editLabel, setEditLabel] = useState('')
+  const [editEmoji, setEditEmoji] = useState('✨')
+  const [editCategory, setEditCategory] = useState<ActivityCategory>('leisure')
+  const [editPointInTime, setEditPointInTime] = useState(true)
+  const [editDuration, setEditDuration] = useState('30')
 
   useEffect(() => {
     const unsubscribe = subscribeUserPresets(
@@ -72,13 +104,100 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
     await updatePresets(next)
   }
 
+  const addCustomPreset = async () => {
+    const label = customLabel.trim()
+    if (!label) {
+      setErrorMessage('Custom preset label is required.')
+      return
+    }
+
+    const slug = toSlug(label)
+    if (!slug) {
+      setErrorMessage('Use letters or numbers for custom preset label.')
+      return
+    }
+
+    const durationParsed = Number(customDuration)
+    const normalizedDuration =
+      customPointInTime || !Number.isFinite(durationParsed) || durationParsed <= 0
+        ? undefined
+        : Math.round(durationParsed)
+
+    const customPreset: Preset = {
+      id: `custom-${slug}-${Date.now().toString(36)}`,
+      emoji: customEmoji.trim() || '✨',
+      label,
+      category: customCategory,
+      subCategory: slug,
+      isPointInTime: customPointInTime,
+      defaultDuration: normalizedDuration,
+      usageCount: 0,
+    }
+
+    await updatePresets([...presets, customPreset])
+    setCustomLabel('')
+    setCustomEmoji('✨')
+    setCustomCategory('leisure')
+    setCustomPointInTime(true)
+    setCustomDuration('30')
+  }
+
+  const loadEditorFromPreset = (preset: Preset) => {
+    setEditingPresetId(preset.id)
+    setEditLabel(preset.label)
+    setEditEmoji(preset.emoji || '✨')
+    setEditCategory(preset.category)
+    setEditPointInTime(preset.isPointInTime)
+    setEditDuration(`${preset.defaultDuration ?? 30}`)
+  }
+
+  const saveEditedPreset = async () => {
+    if (!editingPresetId) return
+
+    const label = editLabel.trim()
+    if (!label) {
+      setErrorMessage('Preset label is required.')
+      return
+    }
+
+    const durationParsed = Number(editDuration)
+    const normalizedDuration =
+      editPointInTime || !Number.isFinite(durationParsed) || durationParsed <= 0
+        ? undefined
+        : Math.round(durationParsed)
+
+    const next = presets.map((preset) => {
+      if (preset.id !== editingPresetId) return preset
+      return {
+        ...preset,
+        label,
+        emoji: editEmoji.trim() || '✨',
+        category: editCategory,
+        subCategory: toSlug(label) || preset.subCategory || 'general',
+        isPointInTime: editPointInTime,
+        defaultDuration: normalizedDuration,
+      }
+    })
+
+    await updatePresets(next)
+    setEditingPresetId(null)
+  }
+
   return (
     <section className="border-y border-slate-200 bg-white px-4 py-4 sm:rounded-xl sm:border">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-medium text-slate-700">Quick Presets</h3>
         <button
           className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
-          onClick={() => setIsManaging((prev) => !prev)}
+          onClick={() => {
+            setIsManaging((prev) => {
+              const next = !prev
+              if (!next) {
+                setEditingPresetId(null)
+              }
+              return next
+            })
+          }}
           type="button"
         >
           {isManaging ? 'Done' : 'Customize'}
@@ -107,33 +226,111 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
           </p>
           <div className="space-y-2">
             {presets.map((preset, index) => (
-              <div className="flex items-center justify-between rounded-md bg-white px-2 py-2" key={preset.id}>
-                <span className="text-sm text-slate-700">
-                  <span className="mr-2">{preset.emoji}</span>
-                  {preset.label}
-                </span>
-                <div className="flex items-center gap-1">
+              <div key={preset.id}>
+                <div className="flex items-center justify-between rounded-md bg-white px-2 py-2">
                   <button
-                    className="rounded border border-slate-300 px-2 py-0.5 text-xs"
-                    onClick={() => void movePreset(index, -1)}
+                    className={`text-left text-sm ${
+                      editingPresetId === preset.id ? 'text-blue-700' : 'text-slate-700'
+                    }`}
+                    onClick={() => loadEditorFromPreset(preset)}
                     type="button"
                   >
-                    ↑
+                    <span className="mr-2">{preset.emoji}</span>
+                    {preset.label}
                   </button>
-                  <button
-                    className="rounded border border-slate-300 px-2 py-0.5 text-xs"
-                    onClick={() => void movePreset(index, 1)}
-                    type="button"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    className="rounded border border-rose-200 px-2 py-0.5 text-xs text-rose-700"
-                    onClick={() => void updatePresets(presets.filter((item) => item.id !== preset.id))}
-                    type="button"
-                  >
-                    Remove
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      className="rounded border border-slate-300 px-2 py-0.5 text-xs"
+                      onClick={() => void movePreset(index, -1)}
+                      type="button"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      className="rounded border border-slate-300 px-2 py-0.5 text-xs"
+                      onClick={() => void movePreset(index, 1)}
+                      type="button"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      className="rounded border border-rose-200 px-2 py-0.5 text-xs text-rose-700"
+                      onClick={() => void updatePresets(presets.filter((item) => item.id !== preset.id))}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+                <div
+                  className="overflow-hidden transition-all duration-300 ease-out"
+                  style={{
+                    maxHeight: editingPresetId === preset.id ? 280 : 0,
+                    opacity: editingPresetId === preset.id ? 1 : 0,
+                  }}
+                >
+                  <div className="mt-2 space-y-2 rounded-md border border-blue-200 bg-blue-50 p-2">
+                    <p className="text-xs font-medium text-blue-900">Edit preset</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        className="rounded border border-slate-300 px-2 py-1.5 text-xs"
+                        onChange={(event) => setEditLabel(event.target.value)}
+                        placeholder="Label"
+                        value={editLabel}
+                      />
+                      <input
+                        className="rounded border border-slate-300 px-2 py-1.5 text-xs"
+                        maxLength={4}
+                        onChange={(event) => setEditEmoji(event.target.value)}
+                        placeholder="Emoji"
+                        value={editEmoji}
+                      />
+                      <select
+                        className="rounded border border-slate-300 px-2 py-1.5 text-xs"
+                        onChange={(event) => setEditCategory(event.target.value as ActivityCategory)}
+                        value={editCategory}
+                      >
+                        {CATEGORY_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        className="rounded border border-slate-300 px-2 py-1.5 text-xs"
+                        disabled={editPointInTime}
+                        min={1}
+                        onChange={(event) => setEditDuration(event.target.value)}
+                        placeholder="Duration (min)"
+                        type="number"
+                        value={editDuration}
+                      />
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+                      <input
+                        checked={editPointInTime}
+                        onChange={(event) => setEditPointInTime(event.target.checked)}
+                        type="checkbox"
+                      />
+                      Point-in-time preset
+                    </label>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        className="rounded border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+                        onClick={() => setEditingPresetId(null)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="rounded border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800"
+                        onClick={() => void saveEditedPreset()}
+                        type="button"
+                      >
+                        Save preset
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -152,6 +349,61 @@ function PresetGrid({ uid, onPresetClick }: PresetGridProps) {
               ))}
             </div>
           ) : null}
+          <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2">
+            <p className="text-xs font-medium text-slate-700">Add custom preset</p>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                className="rounded border border-slate-300 px-2 py-1.5 text-xs"
+                onChange={(event) => setCustomLabel(event.target.value)}
+                placeholder="Label (required)"
+                value={customLabel}
+              />
+              <input
+                className="rounded border border-slate-300 px-2 py-1.5 text-xs"
+                maxLength={4}
+                onChange={(event) => setCustomEmoji(event.target.value)}
+                placeholder="Emoji"
+                value={customEmoji}
+              />
+              <select
+                className="rounded border border-slate-300 px-2 py-1.5 text-xs"
+                onChange={(event) => setCustomCategory(event.target.value as ActivityCategory)}
+                value={customCategory}
+              >
+                {CATEGORY_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="rounded border border-slate-300 px-2 py-1.5 text-xs"
+                disabled={customPointInTime}
+                min={1}
+                onChange={(event) => setCustomDuration(event.target.value)}
+                placeholder="Duration (min)"
+                type="number"
+                value={customDuration}
+              />
+            </div>
+            <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+              <input
+                checked={customPointInTime}
+                onChange={(event) => setCustomPointInTime(event.target.checked)}
+                type="checkbox"
+              />
+              Point-in-time preset
+            </label>
+            <div className="flex justify-end">
+              <button
+                className="rounded border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800"
+                onClick={() => void addCustomPreset()}
+                type="button"
+              >
+                Add custom
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
       {errorMessage ? (

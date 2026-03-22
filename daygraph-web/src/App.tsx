@@ -18,6 +18,7 @@ import LoginScreen from './components/auth/LoginScreen'
 import AppShell from './components/layout/AppShell'
 import OnboardingFlow from './components/onboarding/OnboardingFlow'
 import LoadingState from './components/shared/LoadingState'
+import { resetUserData } from './services/accountService'
 import { auth, db } from './firebase'
 import type { AppTab, UserProfileDoc } from './types'
 
@@ -117,6 +118,22 @@ function App() {
     await signOut(auth)
   }
 
+  const handleResetData = async () => {
+    const isConfirmed = window.confirm(
+      'This will permanently delete your logs, insights, suggestions, and chat-related data. Continue?',
+    )
+    if (!isConfirmed) return
+
+    try {
+      await resetUserData()
+      setActiveTab('Today')
+      setShowOnboarding(true)
+    } catch (error) {
+      console.error('Failed to reset user data:', error)
+      window.alert('Unable to reset your data right now. Please try again.')
+    }
+  }
+
   if (!authReady) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-4xl items-center justify-center bg-slate-50 sm:px-6">
@@ -162,6 +179,7 @@ function App() {
   return (
     <AppShell
       activeTab={activeTab}
+      onResetData={handleResetData}
       onSignOut={handleSignOut}
       onTabChange={setActiveTab}
       user={user}

@@ -10,19 +10,25 @@ interface AppShellProps {
   activeTab: AppTab
   onTabChange: (tab: AppTab) => void
   onSignOut: () => Promise<void>
+  onResetData: () => Promise<void>
   children: ReactNode
 }
 
 function AppShell({
   user,
   activeTab,
+  onResetData,
   onTabChange,
   onSignOut,
   children,
 }: AppShellProps) {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col bg-slate-50">
-      <Header displayName={user.displayName ?? 'there'} onSignOut={onSignOut} />
+      <Header
+        displayName={user.displayName ?? 'there'}
+        onResetData={onResetData}
+        onSignOut={onSignOut}
+      />
       <InstallAppBanner />
       <TabBar activeTab={activeTab} onTabChange={onTabChange} />
       <div className="flex-1 pb-4 sm:px-6 sm:pb-8">{children}</div>

@@ -138,20 +138,30 @@ Phase 4 status (updated March 21, 2026):
 
 Entry criteria: Phase 4 exit gate passed.
 
-| ID | Step | Depends On | Deliverable | Done When |
-|---|---|---|---|---|
-| P5-01 | Implement correlation analysis pipeline | P3-09,P4-01 | Correlation output contract | Sample-size-aware insights produced |
-| P5-02 | Build Health Correlations UI panel | P5-01 | Narrative + supporting chart | Insight card renders consistently |
-| P5-03 | Build onboarding flow (3 cards + preset setup) | P1-10 | First-run UX | Seen once, then skipped |
-| P5-04 | Build preset customization UI | P1-10 | Add/remove/reorder presets | Persisted and reflected in Today |
-| P5-05 | PWA setup (manifest/service worker/offline shell) | P1-10 | Installable web app | Install prompt + offline shell work |
-| P5-06 | Full UX polish pass (responsive/loading/error/empty) | P3-09,P4-09 | Production UX consistency | Core flows pass mobile/desktop checks |
-| P5-07 | Privacy policy + compliance checks | P1-10 | Public policy page + checklist | Linked and accessible in app |
-| P5-08 | Performance pass (bundle, listeners, query efficiency) | P5-06 | Perf fixes + budgets | Targets met on staging |
-| P5-09 | Final MVP release runbook + production deploy | P5-01..P5-08 | Tagged MVP release | Rollback-tested deployment |
+| ID | Step | Depends On | Deliverable | Done When | Status |
+|---|---|---|---|---|---|
+| P5-01 | Implement correlation analysis pipeline | P3-09,P4-01 | Correlation output contract | Sample-size-aware insights produced | Completed |
+| P5-02 | Build Health Correlations UI panel | P5-01 | Narrative + supporting chart | Insight card renders consistently | Completed |
+| P5-03 | Build onboarding flow (3 cards + preset setup) | P1-10 | First-run UX | Seen once, then skipped | Completed |
+| P5-04 | Build preset customization UI | P1-10 | Add/remove/reorder presets | Persisted and reflected in Today | Completed |
+| P5-05 | PWA setup (manifest/service worker/offline shell) | P1-10 | Installable web app | Install prompt + offline shell work | Completed |
+| P5-06 | Full UX polish pass (responsive/loading/error/empty) | P3-09,P4-09 | Production UX consistency | Core flows pass mobile/desktop checks | Completed |
+| P5-07 | Privacy policy + compliance checks | P1-10 | Public policy page + checklist | Linked and accessible in app | Completed |
+| P5-08 | Performance pass (bundle, listeners, query efficiency) | P5-06 | Perf fixes + budgets | Targets met on staging | Completed |
+| P5-09 | Final MVP release runbook + production deploy | P5-01..P5-08 | Tagged MVP release | Rollback-tested deployment | Completed |
 
 Phase 5 exit gate:
 - Production-ready MVP shipped with privacy/security/performance validated.
+
+Phase 5 status (updated March 22, 2026):
+- Exit gate met.
+- Correlation analysis pipeline and Health Correlations panel shipped with sample-size-aware confidence handling.
+- Onboarding flow shipped (3 cards + preset setup), and preset customization shipped with persistent add/remove/reorder controls.
+- PWA/offline shell improved with explicit offline fallback page and updated service-worker caching strategy.
+- UX polish pass completed across Today/Insights/Chat for responsive states and empty/loading/error behavior.
+- Privacy policy published at `/privacy.html`, in-app Privacy link added, and compliance checklist logged.
+- Performance pass completed with route-level lazy loading and vendor chunk splitting.
+- MVP release runbook added and production deploy completed to `daygraph-49867` (`https://daygraph-49867.web.app`).
 
 ---
 

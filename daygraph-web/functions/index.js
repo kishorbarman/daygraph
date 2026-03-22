@@ -1293,6 +1293,47 @@ exports.getCorrelations = onCall({ region: 'us-central1' }, async (request) => {
   }
 })
 
+exports.resetUserData = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'You must be signed in to reset your data.')
+  }
+
+  const uid = request.auth.uid
+  const userRef = db.doc(`users/${uid}`)
+  const userSnap = await userRef.get()
+
+  const existing = userSnap.data() || {}
+  const preservedProfile = {
+    displayName: existing.displayName || '',
+    email: existing.email || '',
+    photoURL: existing.photoURL || '',
+    timezone: existing.timezone || 'UTC',
+    createdAt: existing.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+  }
+
+  const subcollections = await userRef.listCollections()
+  await Promise.all(
+    subcollections.map(async (collectionRef) => {
+      await db.recursiveDelete(collectionRef)
+    }),
+  )
+
+  await userRef.set(
+    {
+      ...preservedProfile,
+      onboardingCompleted: false,
+      onboardingCompletedAt: null,
+      lastResetAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastActiveAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  )
+
+  return {
+    success: true,
+  }
+})
+
 exports.parseActivityPreview = onCall({ region: 'us-central1' }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'You must be signed in to parse activities.')

@@ -1,9 +1,10 @@
 interface HeaderProps {
   displayName: string
   onSignOut: () => Promise<void>
+  onResetData: () => Promise<void>
 }
 
-function Header({ displayName, onSignOut }: HeaderProps) {
+function Header({ displayName, onSignOut, onResetData }: HeaderProps) {
   return (
     <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-4 sm:mb-6 sm:rounded-xl sm:border sm:px-5">
       <div className="flex items-center gap-3">
@@ -26,6 +27,13 @@ function Header({ displayName, onSignOut }: HeaderProps) {
         >
           Privacy
         </a>
+        <button
+          className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 transition hover:bg-amber-100"
+          onClick={() => void onResetData()}
+          type="button"
+        >
+          Reset data
+        </button>
         <button
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
           onClick={onSignOut}
