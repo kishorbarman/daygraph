@@ -35,7 +35,7 @@ function InputBar({ onSubmit }: InputBarProps) {
         className="mb-2 block text-sm font-medium text-slate-700"
         htmlFor="activity-input"
       >
-        What did you do?
+        What do you want to log?
       </label>
       <div className="flex gap-2">
         <input

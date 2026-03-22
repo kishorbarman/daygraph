@@ -256,14 +256,14 @@ function TodayTab({ user }: TodayTabProps) {
           />
         ) : null}
         <RawQueueStatus onRetry={handleRawRetry} rawItems={rawItems} />
+        <InputBar onSubmit={handleTextLog} />
+        <PresetGrid onPresetClick={handlePresetLog} uid={user.uid} />
         <Timeline
           activities={activities}
           errorMessage={errorMessage}
           isLoading={isLoading}
           onActivityClick={setSelectedActivity}
         />
-        <PresetGrid onPresetClick={handlePresetLog} uid={user.uid} />
-        <InputBar onSubmit={handleTextLog} />
       </div>
       {previewResult ? (
         <ParsePreviewModal

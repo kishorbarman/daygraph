@@ -41,7 +41,7 @@ async function upsertUserProfile(user: User) {
 
   if (existingUser.exists()) {
     await updateDoc(userRef, baseProfile)
-    return
+    return existingUser.data()?.onboardingCompleted === true
   }
 
   const newProfile: UserProfileDoc = {
@@ -53,6 +53,7 @@ async function upsertUserProfile(user: User) {
     ...newProfile,
     onboardingCompleted: false,
   })
+  return false
 }
 
 function App() {
@@ -72,30 +73,23 @@ function App() {
 
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser)
+      setAuthReady(true)
 
       if (!nextUser) {
-        if (isMounted) {
-          setAuthReady(true)
-        }
+        setShowOnboarding(false)
         return
       }
 
       void upsertUserProfile(nextUser)
-        .then(async () => {
-          const userSnap = await getDoc(doc(db, `users/${nextUser.uid}`))
-          const onboardingCompleted = userSnap.data()?.onboardingCompleted === true
-          if (isMounted) {
-            setShowOnboarding(!onboardingCompleted)
-          }
+        .then((onboardingCompleted) => {
+          if (!isMounted || auth.currentUser?.uid !== nextUser.uid) return
+          setShowOnboarding(!onboardingCompleted)
         })
         .catch((error) => {
           // Keep auth available even if profile upsert fails.
           console.error('Failed to sync user profile:', error)
-        })
-        .finally(() => {
-          if (isMounted) {
-            setAuthReady(true)
-          }
+          if (!isMounted || auth.currentUser?.uid !== nextUser.uid) return
+          setShowOnboarding(false)
         })
     })
 

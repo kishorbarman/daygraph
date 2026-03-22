@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import TodayTab from '../TodayTab'
@@ -107,7 +107,7 @@ describe('TodayTab', () => {
 
     render(<TodayTab user={{ uid: 'u1' } as never} />)
 
-    await user.type(screen.getByLabelText('What did you do?'), 'Worked on roadmap')
+    await user.type(screen.getByLabelText('What do you want to log?'), 'Worked on roadmap')
     await user.click(screen.getByRole('button', { name: 'Log' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
@@ -141,7 +141,11 @@ describe('TodayTab', () => {
 
     render(<TodayTab user={{ uid: 'u1' } as never} />)
 
-    await user.click(screen.getAllByText('Breakfast')[0])
+    const timelineSection = screen
+      .getByRole('heading', { name: 'Today Timeline' })
+      .closest('section')
+    expect(timelineSection).not.toBeNull()
+    await user.click(within(timelineSection as HTMLElement).getByText('Breakfast'))
     await user.clear(screen.getByDisplayValue('Breakfast'))
     await user.type(screen.getByRole('textbox', { name: /Activity/i }), 'Late breakfast')
     await user.selectOptions(screen.getByRole('combobox', { name: /Category/i }), 'leisure')
@@ -160,7 +164,11 @@ describe('TodayTab', () => {
 
     render(<TodayTab user={{ uid: 'u1' } as never} />)
 
-    await user.click(screen.getAllByText('Breakfast')[0])
+    const timelineSection = screen
+      .getByRole('heading', { name: 'Today Timeline' })
+      .closest('section')
+    expect(timelineSection).not.toBeNull()
+    await user.click(within(timelineSection as HTMLElement).getByText('Breakfast'))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     expect(deleteActivityEntryMock).toHaveBeenCalledWith('u1', 'a1')
