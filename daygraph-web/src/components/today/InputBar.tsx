@@ -25,7 +25,11 @@ function InputBar({ onSubmit, canLog, disabledMessage }: InputBarProps) {
       setInputValue('')
     } catch (error) {
       console.error('Failed to save manual activity:', error)
-      setErrorMessage('Could not save your activity. Please try again.')
+      const nextError =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Could not save your activity. Please try again.'
+      setErrorMessage(nextError)
     } finally {
       setIsSubmitting(false)
     }

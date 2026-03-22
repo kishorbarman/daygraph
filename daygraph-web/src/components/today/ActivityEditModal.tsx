@@ -26,6 +26,8 @@ interface ActivityEditModalProps {
   }) => Promise<void>
 }
 
+type DurationUnit = 'min' | 'hr' | 'sec'
+
 function toDateTimeLocalValue(value: Date) {
   const year = value.getFullYear()
   const month = `${value.getMonth() + 1}`.padStart(2, '0')
@@ -33,6 +35,15 @@ function toDateTimeLocalValue(value: Date) {
   const hours = `${value.getHours()}`.padStart(2, '0')
   const minutes = `${value.getMinutes()}`.padStart(2, '0')
   return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+function minutesFromDurationInput(value: string, unit: DurationUnit) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+
+  if (unit === 'hr') return Number((parsed * 60).toFixed(2))
+  if (unit === 'sec') return Number((parsed / 60).toFixed(2))
+  return Number(parsed.toFixed(2))
 }
 
 function ActivityEditModal({
@@ -43,9 +54,10 @@ function ActivityEditModal({
 }: ActivityEditModalProps) {
   const [activityText, setActivityText] = useState(activity.activity)
   const [category, setCategory] = useState<ActivityCategory>(activity.category)
-  const [durationMinutes, setDurationMinutes] = useState<number | null>(
-    activity.durationMinutes,
+  const [durationValue, setDurationValue] = useState(
+    activity.durationMinutes === null ? '' : `${activity.durationMinutes}`,
   )
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>('min')
   const [timestampInput, setTimestampInput] = useState(
     toDateTimeLocalValue(activity.timestamp.toDate()),
   )
@@ -80,10 +92,20 @@ function ActivityEditModal({
         return
       }
 
+      const nextDurationMinutes =
+        durationValue.trim().length === 0
+          ? null
+          : minutesFromDurationInput(durationValue, durationUnit)
+
+      if (durationValue.trim().length > 0 && nextDurationMinutes === null) {
+        setErrorMessage('Please enter a valid duration.')
+        return
+      }
+
       await onSave({
         activity: activityText,
         category,
-        durationMinutes,
+        durationMinutes: nextDurationMinutes,
         timestamp: parsedTimestamp,
       })
     } catch (error) {
@@ -140,25 +162,28 @@ function ActivityEditModal({
             </select>
           </label>
 
-          <label className="block" htmlFor="activity-edit-duration">
-            <span className="mb-1 block text-xs font-medium text-slate-600">Duration (minutes)</span>
-            <input
-              className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-              id="activity-edit-duration"
-              onChange={(event) => {
-                const next = event.target.value.trim()
-                if (!next) {
-                  setDurationMinutes(null)
-                  return
-                }
-                const parsed = Number(next)
-                setDurationMinutes(Number.isFinite(parsed) && parsed > 0 ? parsed : null)
-              }}
-              placeholder="Leave empty for point-in-time"
-              type="number"
-              value={durationMinutes ?? ''}
-            />
-          </label>
+          <div className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Duration</span>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <input
+                className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                id="activity-edit-duration"
+                onChange={(event) => setDurationValue(event.target.value)}
+                placeholder="Leave empty for point-in-time"
+                type="number"
+                value={durationValue}
+              />
+              <select
+                className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                onChange={(event) => setDurationUnit(event.target.value as DurationUnit)}
+                value={durationUnit}
+              >
+                <option value="min">min</option>
+                <option value="hr">hr</option>
+                <option value="sec">sec</option>
+              </select>
+            </div>
+          </div>
 
           <label className="block" htmlFor="activity-edit-time">
             <span className="mb-1 block text-xs font-medium text-slate-600">Date and time</span>

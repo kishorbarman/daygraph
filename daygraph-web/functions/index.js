@@ -23,7 +23,7 @@ const ACTIVITY_CATEGORIES = [
   'transit',
 ]
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash'
 const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.1-pro'
 const GEMINI_RESEARCH_MODEL = process.env.GEMINI_RESEARCH_MODEL || GEMINI_CHAT_MODEL
 
@@ -346,13 +346,32 @@ async function recomputeWeeklyStatsForUser(uid, timezone, now = new Date()) {
 
 function inferDurationMinutes(text) {
   const normalized = text.toLowerCase()
-  const hourMatch = normalized.match(/(\d+)\s*(h|hr|hrs|hour|hours)/)
-  if (hourMatch) return Number(hourMatch[1]) * 60
+  const hourMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours)\b/)
+  if (hourMatch) return Math.round(Number(hourMatch[1]) * 60)
 
-  const minuteMatch = normalized.match(/(\d+)\s*(m|min|mins|minute|minutes)/)
-  if (minuteMatch) return Number(minuteMatch[1])
+  const minuteMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(m|min|mins|minute|minutes)\b/)
+  if (minuteMatch) return Math.round(Number(minuteMatch[1]))
+
+  const secondMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(s|sec|secs|second|seconds)\b/)
+  if (secondMatch) return Math.max(1, Math.round(Number(secondMatch[1]) / 60))
+
+  if (/\bhalf\s+(?:an?\s+)?hour\b/.test(normalized)) return 30
+  if (/\b(?:an?|one)\s+hour\b/.test(normalized)) return 60
+  if (/\b(?:an?|one)\s+minute\b/.test(normalized)) return 1
 
   return null
+}
+
+function stripDurationPhrase(text) {
+  return text
+    .replace(
+      /\b(?:for|about|around|~)?\s*(?:(?:an?|one)\s+hour|half\s+(?:an?\s+)?hour|\d+(?:\.\d+)?\s*(?:h|hr|hrs|hour|hours|min|mins|minute|minutes|s|sec|secs|second|seconds))\b/gi,
+      '',
+    )
+    .replace(/\b(?:for|about|around|~)\s*$/gi, '')
+    .replace(/\s+[.,;:!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function toSubCategory(text, category) {
@@ -464,33 +483,43 @@ async function loadUserContext(uid) {
   }
 }
 
-function sanitizeParsedActivities(parsed, timezone) {
+function sanitizeParsedActivities(parsed, timezone, correctionRules = []) {
   if (!Array.isArray(parsed)) return []
 
   return parsed
     .map((item) => {
-      const category = ACTIVITY_CATEGORIES.includes(item?.category)
+      const parsedActivity = typeof item?.activity === 'string' ? item.activity.trim() : ''
+      if (!parsedActivity) return null
+      const normalizedActivity = stripDurationPhrase(parsedActivity) || parsedActivity
+
+      const inferredCategory = inferCategory(normalizedActivity, correctionRules)
+      let category = ACTIVITY_CATEGORIES.includes(item?.category)
         ? item.category
-        : 'leisure'
-      const activity = typeof item?.activity === 'string' ? item.activity.trim() : ''
-      if (!activity) return null
+        : inferredCategory
+
+      // If model falls back to "leisure", prefer stronger keyword-based inference.
+      if (category === 'leisure' && inferredCategory !== 'leisure') {
+        category = inferredCategory
+      }
 
       const subCategory =
         typeof item?.subCategory === 'string' && item.subCategory.trim().length > 0
           ? item.subCategory.trim()
-          : toSubCategory(activity, category)
+          : toSubCategory(normalizedActivity, category)
 
       const timestamp =
         typeof item?.timestamp === 'string' && !Number.isNaN(Date.parse(item.timestamp))
           ? new Date(item.timestamp).toISOString()
           : new Date().toISOString()
 
+      const inferredDuration = inferDurationMinutes(parsedActivity)
+
       let durationMinutes =
         typeof item?.durationMinutes === 'number' && item.durationMinutes > 0
           ? Math.round(item.durationMinutes)
-          : null
+          : inferredDuration
 
-      let isPointInTime = item?.isPointInTime === true || durationMinutes === null
+      let isPointInTime = durationMinutes === null
       if (isPointInTime) durationMinutes = null
 
       const endTimestamp =
@@ -508,7 +537,7 @@ function sanitizeParsedActivities(parsed, timezone) {
           : null
 
       return {
-        activity,
+        activity: normalizedActivity,
         category,
         subCategory,
         timestamp,
@@ -540,6 +569,10 @@ async function parseWithGemini({ text, timezone, correctionRules, recentActiviti
   const prompt = [
     'You are an activity parser for DayGraph.',
     'Parse the user input into an array of structured activity objects.',
+    'CRITICAL: Separate activity text from duration.',
+    'If the user says "Building with Claude code for 1 hour", output activity="Building with Claude code" and durationMinutes=60.',
+    'Do not leave duration words inside activity text.',
+    'Set category to the most specific valid category based on semantics.',
     `Timezone: ${timezone}`,
     `Now: ${new Date().toISOString()}`,
     'Allowed categories: meal, caffeine, sleep, exercise, social, work, leisure, self_care, errand, transit.',
@@ -605,7 +638,7 @@ async function parseWithGemini({ text, timezone, correctionRules, recentActiviti
   }
 
   const parsed = JSON.parse(textPart.text)
-  const sanitized = sanitizeParsedActivities(parsed, timezone)
+    const sanitized = sanitizeParsedActivities(parsed, timezone, correctionRules)
 
   if (sanitized.length === 0) {
     throw new Error('Gemini returned empty/invalid parsed activities')

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import type { User } from 'firebase/auth'
 import {
   createActivitiesFromPreview,
-  createRawActivityInput,
   createPresetActivity,
   createSuggestedActivity,
   deleteActivityEntry,
@@ -157,12 +156,24 @@ function TodayTab({ user }: TodayTabProps) {
       setRawInput(text)
       setPreviewResult(preview)
     } catch (error) {
-      console.error('Preview parsing unavailable, queueing raw input:', error)
-      await createRawActivityInput({
-        uid: user.uid,
-        input: text,
-        source: 'text',
-      })
+      console.error('Preview parsing unavailable:', error)
+      const code = (error as { code?: string })?.code
+      const message = (error as { message?: string })?.message
+      const normalizedMessage = `${message ?? ''}`.toLowerCase().trim()
+
+      if (code === 'functions/unauthenticated') {
+        throw new Error('Session expired. Please sign out and sign back in.')
+      }
+
+      if (code === 'functions/internal' || normalizedMessage === 'internal') {
+        throw new Error('AI parser is temporarily unavailable. Please try again in a moment.')
+      }
+
+      if (typeof message === 'string' && message.trim().length > 0) {
+        throw new Error(message)
+      }
+
+      throw new Error('Could not parse with AI right now. Please try again.')
     }
   }
 
