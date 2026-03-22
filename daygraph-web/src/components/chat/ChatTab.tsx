@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { User } from 'firebase/auth'
 import { getChatResponse } from '../../services/chatService'
 import type { ChatMessage } from '../../types'
@@ -23,11 +23,19 @@ function ChatTab({ user }: ChatTabProps) {
   const [isSending, setIsSending] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [deepResearch, setDeepResearch] = useState(false)
+  const messageListRef = useRef<HTMLDivElement | null>(null)
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null)
 
   const followups = useMemo(() => {
     const latestAssistant = [...messages].reverse().find((item) => item.role === 'assistant')
     return latestAssistant?.followups ?? []
   }, [messages])
+
+  useEffect(() => {
+    const container = messageListRef.current
+    if (!container) return
+    bottomAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [messages, isSending])
 
   const sendMessage = async (messageText: string) => {
     const trimmed = messageText.trim()
@@ -91,7 +99,7 @@ function ChatTab({ user }: ChatTabProps) {
       </section>
 
       <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1" ref={messageListRef}>
           {messages.map((message) => (
             <article
               className={`rounded-xl px-3 py-2 ${
@@ -112,6 +120,12 @@ function ChatTab({ user }: ChatTabProps) {
               ) : null}
             </article>
           ))}
+          {isSending ? (
+            <article className="mr-6 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900">
+              <p className="text-sm text-slate-600">DayGraph is thinking...</p>
+            </article>
+          ) : null}
+          <div ref={bottomAnchorRef} />
         </div>
 
         {errorMessage ? <p className="text-xs text-rose-600">{errorMessage}</p> : null}
@@ -133,7 +147,7 @@ function ChatTab({ user }: ChatTabProps) {
         ) : null}
 
         <form
-          className="sticky bottom-0 flex items-end gap-2 border-t border-slate-200 bg-white pt-3"
+          className="sticky bottom-0 flex items-end gap-2 border-t border-slate-200 bg-white pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-3"
           onSubmit={(event) => {
             event.preventDefault()
             void sendMessage(input)

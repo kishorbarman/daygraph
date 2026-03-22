@@ -256,7 +256,7 @@ function PresetGrid({
           <div className="space-y-2">
             {presets.map((preset, index) => (
               <div key={preset.id}>
-                <div className="flex items-center justify-between rounded-md bg-white px-2 py-2">
+                <div className="flex items-start justify-between gap-2 rounded-md bg-white px-2 py-2">
                   <button
                     className={`text-left text-sm ${
                       editingPresetId === preset.id ? 'text-blue-700' : 'text-slate-700'
@@ -269,21 +269,23 @@ function PresetGrid({
                   </button>
                   <div className="flex items-center gap-1">
                     <button
-                      className="rounded border border-slate-300 px-2 py-0.5 text-xs"
+                      aria-label={`Move ${preset.label} up`}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-sm text-slate-700"
                       onClick={() => void movePreset(index, -1)}
                       type="button"
                     >
                       ↑
                     </button>
                     <button
-                      className="rounded border border-slate-300 px-2 py-0.5 text-xs"
+                      aria-label={`Move ${preset.label} down`}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-sm text-slate-700"
                       onClick={() => void movePreset(index, 1)}
                       type="button"
                     >
                       ↓
                     </button>
                     <button
-                      className="rounded border border-rose-200 px-2 py-0.5 text-xs text-rose-700"
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-rose-200 px-3 text-xs font-medium text-rose-700"
                       onClick={() => void updatePresets(presets.filter((item) => item.id !== preset.id))}
                       type="button"
                     >
