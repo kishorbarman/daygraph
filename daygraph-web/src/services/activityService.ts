@@ -8,6 +8,16 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from '../firebase'
+import {
+  sanitizeActivitySource,
+  sanitizeActivityText,
+  sanitizeCategory,
+  sanitizeDurationMinutes,
+  sanitizeMoodEnergyScore,
+  sanitizeRawInput,
+  sanitizeSubCategory,
+  sanitizeTags,
+} from './inputGuards'
 import type {
   ActivityCategory,
   ActivityRecord,
@@ -49,25 +59,32 @@ interface SaveActivityEditsInput {
 function createBaseActivityPayload(input: CreateManualActivityInput) {
   const now = new Date()
   const duration =
-    input.isPointInTime === true ? null : (input.durationMinutes ?? 30)
+    input.isPointInTime === true
+      ? null
+      : (sanitizeDurationMinutes(input.durationMinutes ?? 30) ?? 30)
+  const activity = sanitizeActivityText(input.activity)
+  const category = sanitizeCategory(input.category)
+  const subCategory =
+    sanitizeSubCategory(input.subCategory || activity.toLowerCase()) || 'general'
+  const source = sanitizeActivitySource(input.source)
 
   const endTimestamp =
     duration === null ? null : new Date(now.getTime() + duration * 60_000)
 
   return {
-    activity: input.activity,
-    category: input.category,
-    subCategory: input.subCategory,
+    activity,
+    category,
+    subCategory,
     timestamp: now,
     endTimestamp,
     durationMinutes: duration,
     isPointInTime: input.isPointInTime,
-    tags: input.tags ?? [],
+    tags: sanitizeTags(input.tags),
     mood: null,
     energy: null,
-    notes: input.activity,
-    source: input.source,
-    rawInput: input.activity,
+    notes: sanitizeRawInput(input.activity),
+    source,
+    rawInput: sanitizeRawInput(input.activity),
     createdAt: serverTimestamp(),
     editedAt: null,
   }
@@ -80,28 +97,32 @@ function createPayloadFromDraft(
 ) {
   const timestamp = new Date(draft.timestamp)
   const endTimestamp = draft.endTimestamp ? new Date(draft.endTimestamp) : null
+  const activity = sanitizeActivityText(draft.activity)
+  const raw = sanitizeRawInput(rawInput)
 
   return {
-    activity: draft.activity,
-    category: draft.category,
-    subCategory: draft.subCategory,
+    activity,
+    category: sanitizeCategory(draft.category),
+    subCategory: sanitizeSubCategory(draft.subCategory) || 'general',
     timestamp,
     endTimestamp,
-    durationMinutes: draft.durationMinutes,
-    isPointInTime: draft.isPointInTime,
-    tags: draft.tags ?? [],
+    durationMinutes: sanitizeDurationMinutes(draft.durationMinutes),
+    isPointInTime: draft.isPointInTime !== false
+      ? sanitizeDurationMinutes(draft.durationMinutes) === null
+      : false,
+    tags: sanitizeTags(draft.tags),
     mood: null,
     energy: null,
-    notes: rawInput,
-    source,
-    rawInput,
+    notes: raw,
+    source: sanitizeActivitySource(source),
+    rawInput: raw,
     createdAt: serverTimestamp(),
     editedAt: null,
   }
 }
 
 export async function createManualTextActivity(uid: string, inputText: string) {
-  const trimmed = inputText.trim()
+  const trimmed = sanitizeActivityText(inputText)
   if (trimmed.length === 0) return
 
   await addDoc(
@@ -138,12 +159,12 @@ export async function createRawActivityInput({
   input,
   source,
 }: CreateRawActivityInput) {
-  const trimmed = input.trim()
+  const trimmed = sanitizeRawInput(input)
   if (!trimmed) return
 
   await addDoc(collection(db, `users/${uid}/activitiesRaw`), {
     input: trimmed,
-    source,
+    source: sanitizeActivitySource(source),
     status: 'pending',
     parsedActivityIds: [],
     createdAt: serverTimestamp(),
@@ -164,7 +185,7 @@ export async function retryRawActivityInput(
     updatedAt: serverTimestamp(),
   })
 
-  await createRawActivityInput({ uid, input, source })
+  await createRawActivityInput({ uid, input, source: sanitizeActivitySource(source) })
 }
 
 export async function createActivitiesFromPreview(
@@ -194,31 +215,34 @@ export async function saveActivityEdits({
 }: SaveActivityEditsInput) {
   const activityRef = doc(db, `users/${uid}/activities/${activityId}`)
   const timestamp = next.timestamp
+  const sanitizedDuration = sanitizeDurationMinutes(next.durationMinutes)
   const endTimestamp =
-    next.durationMinutes === null
+    sanitizedDuration === null
       ? null
-      : new Date(timestamp.getTime() + next.durationMinutes * 60_000)
+      : new Date(timestamp.getTime() + sanitizedDuration * 60_000)
+  const sanitizedActivity = sanitizeActivityText(next.activity) || previous.activity
+  const sanitizedCategory = sanitizeCategory(next.category) || previous.category
 
   await updateDoc(activityRef, {
-    activity: next.activity.trim() || previous.activity,
-    category: next.category,
+    activity: sanitizedActivity,
+    category: sanitizedCategory,
     subCategory:
-      next.category === previous.category ? previous.subCategory : 'general',
-    durationMinutes: next.durationMinutes,
-    isPointInTime: next.durationMinutes === null,
+      sanitizedCategory === previous.category ? previous.subCategory : 'general',
+    durationMinutes: sanitizedDuration,
+    isPointInTime: sanitizedDuration === null,
     timestamp,
     endTimestamp,
     editedAt: serverTimestamp(),
   })
 
-  if (next.category !== previous.category) {
+  if (sanitizedCategory !== previous.category) {
     await addDoc(collection(db, `users/${uid}/corrections`), {
       activityId,
       field: 'category',
       originalValue: previous.category,
-      correctedValue: next.category,
-      activityText: previous.activity,
-      correctedCategory: next.category,
+      correctedValue: sanitizedCategory,
+      activityText: sanitizeActivityText(previous.activity) || previous.activity,
+      correctedCategory: sanitizedCategory,
       createdAt: serverTimestamp(),
     })
   }
@@ -236,10 +260,12 @@ export async function saveActivityMoodEnergy(
   energy: number,
 ) {
   const activityRef = doc(db, `users/${uid}/activities/${activityId}`)
+  const sanitizedMood = sanitizeMoodEnergyScore(mood)
+  const sanitizedEnergy = sanitizeMoodEnergyScore(energy)
 
   await updateDoc(activityRef, {
-    mood,
-    energy,
+    mood: sanitizedMood,
+    energy: sanitizedEnergy,
     editedAt: serverTimestamp(),
   })
 }

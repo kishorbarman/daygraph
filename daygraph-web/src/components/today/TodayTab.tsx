@@ -39,6 +39,10 @@ import RawQueueStatus from './RawQueueStatus'
 import Timeline from './Timeline'
 import MoodEnergyPromptCard from './MoodEnergyPromptCard'
 import SuggestionCard from './SuggestionCard'
+import {
+  readStoredJson,
+  writeStoredJson,
+} from '../../utils/browserStorage'
 import { formatDateKey } from '../../utils/insightsDate'
 import { startOfDay } from '../../utils/dateUtils'
 
@@ -46,28 +50,10 @@ interface TodayTabProps {
   user: User
 }
 
-function getStorage() {
-  if (
-    typeof globalThis !== 'undefined' &&
-    typeof globalThis.localStorage?.getItem === 'function' &&
-    typeof globalThis.localStorage?.setItem === 'function'
-  ) {
-    return globalThis.localStorage
-  }
-
-  return null
-}
-
 function readDismissedSuggestionIds(storageKey: string) {
-  const storage = getStorage()
-  const raw = storage?.getItem(storageKey)
-  if (!raw) return []
-
-  try {
-    return (JSON.parse(raw) as string[]).filter((item) => typeof item === 'string')
-  } catch {
-    return []
-  }
+  return readStoredJson<unknown[]>(storageKey, []).filter(
+    (item): item is string => typeof item === 'string',
+  )
 }
 
 function TodayTab({ user }: TodayTabProps) {
@@ -109,18 +95,14 @@ function TodayTab({ user }: TodayTabProps) {
         .find((item) => item.mood === null || item.energy === null) ?? null,
     [activities],
   )
-  const dismissedForCount = (() => {
+  const dismissedForCount = useMemo(() => {
     void promptRefreshKey
-    const storage = getStorage()
-    const cached = storage?.getItem(todayPromptStorageKey)
-    if (!cached) return -1
-    try {
-      const parsed = JSON.parse(cached) as { dismissedForCount?: number }
-      return parsed.dismissedForCount ?? -1
-    } catch {
-      return -1
-    }
-  })()
+    const parsed = readStoredJson<{ dismissedForCount?: number }>(
+      todayPromptStorageKey,
+      {},
+    )
+    return parsed.dismissedForCount ?? -1
+  }, [promptRefreshKey, todayPromptStorageKey])
 
   const shouldShowMoodPrompt =
     isViewingToday &&
@@ -267,20 +249,14 @@ function TodayTab({ user }: TodayTabProps) {
   }
 
   const handleMoodPromptDismiss = () => {
-    const storage = getStorage()
-    const cached = storage?.getItem(todayPromptStorageKey)
-    let parsed: { dismissedForCount?: number } = {}
-    if (cached) {
-      try {
-        parsed = JSON.parse(cached) as { dismissedForCount?: number }
-      } catch {
-        parsed = {}
-      }
-    }
-    storage?.setItem(
+    const parsed = readStoredJson<{ dismissedForCount?: number }>(
       todayPromptStorageKey,
-      JSON.stringify({ ...parsed, dismissedForCount: activities.length }),
+      {},
     )
+    writeStoredJson(todayPromptStorageKey, {
+      ...parsed,
+      dismissedForCount: activities.length,
+    })
     setPromptRefreshKey((prev) => prev + 1)
   }
 
@@ -297,15 +273,11 @@ function TodayTab({ user }: TodayTabProps) {
   }
 
   const rememberSuggestionDismissed = (suggestionId: string) => {
-    const storage = getStorage()
     const existing = readDismissedSuggestionIds(suggestionDismissStorageKey)
 
     if (existing.includes(suggestionId)) return
 
-    storage?.setItem(
-      suggestionDismissStorageKey,
-      JSON.stringify([...existing, suggestionId].slice(-50)),
-    )
+    writeStoredJson(suggestionDismissStorageKey, [...existing, suggestionId].slice(-50))
   }
 
   const handleSuggestionDismiss = async (item: SuggestionItem) => {

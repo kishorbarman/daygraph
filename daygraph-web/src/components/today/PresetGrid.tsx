@@ -5,6 +5,11 @@ import {
   saveUserPresets,
   subscribeUserPresets,
 } from '../../services/presetService'
+import {
+  durationEditorDefaults,
+  presetMinutesFromDurationValue,
+  type PresetDurationUnit,
+} from '../../utils/duration'
 
 interface PresetGridProps {
   uid: string
@@ -12,8 +17,6 @@ interface PresetGridProps {
   canLog: boolean
   disabledMessage?: string
 }
-
-type DurationUnit = 'min' | 'hr'
 
 const CATEGORY_OPTIONS: ActivityCategory[] = [
   'meal',
@@ -36,22 +39,6 @@ function toSlug(value: string) {
     .slice(0, 40)
 }
 
-function durationMinutesFromValue(value: string, unit: DurationUnit) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined
-  return unit === 'hr' ? Math.round(parsed * 60) : Math.round(parsed)
-}
-
-function durationEditorDefaults(minutes?: number) {
-  if (typeof minutes !== 'number' || minutes <= 0) {
-    return { value: '30', unit: 'min' as DurationUnit }
-  }
-  if (minutes % 60 === 0) {
-    return { value: `${minutes / 60}`, unit: 'hr' as DurationUnit }
-  }
-  return { value: `${minutes}`, unit: 'min' as DurationUnit }
-}
-
 function PresetGrid({
   uid,
   onPresetClick,
@@ -68,14 +55,14 @@ function PresetGrid({
   const [customCategory, setCustomCategory] = useState<ActivityCategory>('leisure')
   const [customPointInTime, setCustomPointInTime] = useState(true)
   const [customDuration, setCustomDuration] = useState('30')
-  const [customDurationUnit, setCustomDurationUnit] = useState<DurationUnit>('min')
+  const [customDurationUnit, setCustomDurationUnit] = useState<PresetDurationUnit>('min')
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null)
   const [editLabel, setEditLabel] = useState('')
   const [editEmoji, setEditEmoji] = useState('✨')
   const [editCategory, setEditCategory] = useState<ActivityCategory>('leisure')
   const [editPointInTime, setEditPointInTime] = useState(true)
   const [editDuration, setEditDuration] = useState('30')
-  const [editDurationUnit, setEditDurationUnit] = useState<DurationUnit>('min')
+  const [editDurationUnit, setEditDurationUnit] = useState<PresetDurationUnit>('min')
 
   useEffect(() => {
     const unsubscribe = subscribeUserPresets(
@@ -146,7 +133,7 @@ function PresetGrid({
 
     const normalizedDuration = customPointInTime
       ? undefined
-      : durationMinutesFromValue(customDuration, customDurationUnit)
+      : presetMinutesFromDurationValue(customDuration, customDurationUnit)
 
     const customPreset: Preset = {
       id: `custom-${slug}-${Date.now().toString(36)}`,
@@ -190,7 +177,7 @@ function PresetGrid({
 
     const normalizedDuration = editPointInTime
       ? undefined
-      : durationMinutesFromValue(editDuration, editDurationUnit)
+      : presetMinutesFromDurationValue(editDuration, editDurationUnit)
 
     const next = presets.map((preset) => {
       if (preset.id !== editingPresetId) return preset
@@ -340,7 +327,9 @@ function PresetGrid({
                         <select
                           className="w-16 border-l border-slate-300 bg-slate-50 px-1 py-1.5 text-xs disabled:bg-slate-100"
                           disabled={editPointInTime}
-                          onChange={(event) => setEditDurationUnit(event.target.value as DurationUnit)}
+                          onChange={(event) =>
+                            setEditDurationUnit(event.target.value as PresetDurationUnit)
+                          }
                           value={editDurationUnit}
                         >
                           <option value="min">min</option>
@@ -431,7 +420,9 @@ function PresetGrid({
                 <select
                   className="w-16 border-l border-slate-300 bg-slate-50 px-1 py-1.5 text-xs disabled:bg-slate-100"
                   disabled={customPointInTime}
-                  onChange={(event) => setCustomDurationUnit(event.target.value as DurationUnit)}
+                  onChange={(event) =>
+                    setCustomDurationUnit(event.target.value as PresetDurationUnit)
+                  }
                   value={customDurationUnit}
                 >
                   <option value="min">min</option>

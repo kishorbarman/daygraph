@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react'
 import { normalizeCategoryLabel } from '../../constants/categories'
 import type { ActivityCategory, ActivityRecord } from '../../types'
+import {
+  formatDateTimeLocalValue,
+  minutesFromDurationValue,
+  type DurationUnit,
+} from '../../utils/duration'
 
 interface ActivityEditModalProps {
   activity: ActivityRecord
@@ -13,26 +18,6 @@ interface ActivityEditModalProps {
     durationMinutes: number | null
     timestamp: Date
   }) => Promise<void>
-}
-
-type DurationUnit = 'min' | 'hr' | 'sec'
-
-function toDateTimeLocalValue(value: Date) {
-  const year = value.getFullYear()
-  const month = `${value.getMonth() + 1}`.padStart(2, '0')
-  const day = `${value.getDate()}`.padStart(2, '0')
-  const hours = `${value.getHours()}`.padStart(2, '0')
-  const minutes = `${value.getMinutes()}`.padStart(2, '0')
-  return `${year}-${month}-${day}T${hours}:${minutes}`
-}
-
-function minutesFromDurationInput(value: string, unit: DurationUnit) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed <= 0) return null
-
-  if (unit === 'hr') return Number((parsed * 60).toFixed(2))
-  if (unit === 'sec') return Number((parsed / 60).toFixed(2))
-  return Number(parsed.toFixed(2))
 }
 
 function ActivityEditModal({
@@ -51,7 +36,7 @@ function ActivityEditModal({
   )
   const [durationUnit, setDurationUnit] = useState<DurationUnit>('min')
   const [timestampInput, setTimestampInput] = useState(
-    toDateTimeLocalValue(activity.timestamp.toDate()),
+    formatDateTimeLocalValue(activity.timestamp.toDate()),
   )
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -67,7 +52,7 @@ function ActivityEditModal({
       }),
     [activity.timestamp],
   )
-  const maxDateTimeValue = useMemo(() => toDateTimeLocalValue(new Date()), [])
+  const maxDateTimeValue = useMemo(() => formatDateTimeLocalValue(new Date()), [])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -87,7 +72,7 @@ function ActivityEditModal({
       const nextDurationMinutes =
         durationValue.trim().length === 0
           ? null
-          : minutesFromDurationInput(durationValue, durationUnit)
+          : minutesFromDurationValue(durationValue, durationUnit)
 
       if (durationValue.trim().length > 0 && nextDurationMinutes === null) {
         setErrorMessage('Please enter a valid duration.')

@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore'
 import { functions, db } from '../firebase'
 import type { GetSuggestionInput, GetSuggestionOutput } from '../types'
+import { sanitizeSuggestionId } from './inputGuards'
 
 export async function getSuggestion(
   input: GetSuggestionInput,
@@ -19,8 +20,11 @@ export async function getSuggestion(
 }
 
 export async function dismissSuggestion(uid: string, suggestionId: string) {
+  const sanitizedSuggestionId = sanitizeSuggestionId(suggestionId)
+  if (!sanitizedSuggestionId) return
+
   await addDoc(collection(db, `users/${uid}/suggestionDismissals`), {
-    suggestionId,
+    suggestionId: sanitizedSuggestionId,
     dismissedAt: serverTimestamp(),
   })
 }

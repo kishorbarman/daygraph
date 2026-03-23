@@ -1,5 +1,5 @@
 import type { ActivityRecord } from '../../types'
-import { formatTime } from '../../utils/dateUtils'
+import { addDays, formatTime, isSameDay, startOfDay } from '../../utils/dateUtils'
 import { formatDateKey } from '../../utils/insightsDate'
 import EmptyState from '../shared/EmptyState'
 import ErrorState from '../shared/ErrorState'
@@ -14,26 +14,6 @@ interface TimelineProps {
   selectedDate: Date
   onDateChange: (date: Date) => void
   activityDateKeys: string[]
-}
-
-function normalizeDate(date: Date) {
-  const next = new Date(date)
-  next.setHours(0, 0, 0, 0)
-  return next
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return normalizeDate(next)
-}
-
-function sameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  )
 }
 
 function monthLabel(date: Date) {
@@ -58,9 +38,9 @@ function Timeline({
   const [calendarMonth, setCalendarMonth] = useState(
     () => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
   )
-  const today = normalizeDate(new Date())
+  const today = startOfDay(new Date())
 
-  const selectedDateLabel = sameDay(selectedDate, today)
+  const selectedDateLabel = isSameDay(selectedDate, today)
     ? 'Today'
     : selectedDate.toLocaleDateString([], {
         weekday: 'short',
@@ -265,8 +245,8 @@ function Timeline({
                   dayNumber,
                 )
                 const dayKey = formatDateKey(dayDate)
-                const isSelected = sameDay(dayDate, selectedDate)
-                const isToday = sameDay(dayDate, today)
+                const isSelected = isSameDay(dayDate, selectedDate)
+                const isToday = isSameDay(dayDate, today)
                 const isFuture = dayDate.getTime() > today.getTime()
                 const hasData = highlightedDays.has(dayKey)
 

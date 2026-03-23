@@ -1,21 +1,13 @@
 import { useState } from 'react'
 import { useInstallPrompt } from '../../hooks/useInstallPrompt'
+import { getBrowserStorage, readStoredNumber } from '../../utils/browserStorage'
 
 const DISMISS_STORAGE_KEY = 'daygraph:install-banner-dismissed-at'
 const DISMISS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
 
 function isDismissedWithinCooldown() {
-  if (
-    typeof globalThis === 'undefined' ||
-    typeof globalThis.localStorage?.getItem !== 'function'
-  ) {
-    return false
-  }
-
-  const raw = globalThis.localStorage.getItem(DISMISS_STORAGE_KEY)
-  if (!raw) return false
-  const dismissedAt = Number(raw)
-  if (!Number.isFinite(dismissedAt)) return false
+  const dismissedAt = readStoredNumber(DISMISS_STORAGE_KEY)
+  if (dismissedAt === null) return false
 
   return Date.now() - dismissedAt < DISMISS_COOLDOWN_MS
 }
@@ -51,15 +43,7 @@ function InstallAppBanner() {
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700"
           onClick={() => {
             setDismissed(true)
-            if (
-              typeof globalThis !== 'undefined' &&
-              typeof globalThis.localStorage?.setItem === 'function'
-            ) {
-              globalThis.localStorage.setItem(
-                DISMISS_STORAGE_KEY,
-                Date.now().toString(),
-              )
-            }
+            getBrowserStorage()?.setItem(DISMISS_STORAGE_KEY, Date.now().toString())
           }}
           type="button"
         >

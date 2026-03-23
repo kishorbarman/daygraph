@@ -26,6 +26,20 @@ const ACTIVITY_CATEGORIES = [
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash'
 const GEMINI_CHAT_MODEL = process.env.GEMINI_CHAT_MODEL || 'gemini-3.1-pro'
 const GEMINI_RESEARCH_MODEL = process.env.GEMINI_RESEARCH_MODEL || GEMINI_CHAT_MODEL
+const ACTIVITY_SOURCES = ['text', 'voice', 'preset', 'auto']
+const MAX_INPUT_LENGTH = 1200
+const MAX_ACTIVITY_LENGTH = 200
+const MAX_CATEGORY_LENGTH = 64
+const MAX_SUBCATEGORY_LENGTH = 64
+const MAX_TAGS = 10
+const MAX_DURATION_MINUTES = 10080
+const MAX_CHAT_MESSAGE_LENGTH = 3000
+const MAX_AI_ERROR_LENGTH = 240
+const MAX_SESSION_ID_LENGTH = 120
+const MAX_SUGGESTION_ID_LENGTH = 120
+const MAX_CHART_LABELS = 31
+const MAX_CHART_SERIES = 4
+const MAX_CHART_POINTS = 31
 
 const CATEGORY_KEYWORDS = {
   meal: ['breakfast', 'lunch', 'dinner', 'meal', 'snack'],
@@ -111,6 +125,103 @@ function parseTimestampToDate(value) {
   if (typeof value.toDate === 'function') return value.toDate()
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function trimToMax(value, maxLength) {
+  return value.trim().slice(0, maxLength)
+}
+
+function sanitizeShortString(value, maxLength, fallback = '') {
+  if (typeof value !== 'string') return fallback
+  return trimToMax(value, maxLength)
+}
+
+function sanitizeActivitySource(value) {
+  return ACTIVITY_SOURCES.includes(value) ? value : 'text'
+}
+
+function sanitizeDurationMinutes(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null
+  }
+
+  return Number(Math.min(MAX_DURATION_MINUTES, value).toFixed(2))
+}
+
+function sanitizeTags(tags) {
+  if (!Array.isArray(tags)) return []
+
+  const seen = new Set()
+  const next = []
+
+  tags.forEach((tag) => {
+    if (typeof tag !== 'string') return
+    const trimmed = trimToMax(tag, 32)
+    if (!trimmed) return
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    if (next.length < MAX_TAGS) {
+      next.push(trimmed)
+    }
+  })
+
+  return next
+}
+
+function sanitizeIsoTimestamp(value, fallback = new Date()) {
+  if (typeof value !== 'string') return fallback.toISOString()
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return fallback.toISOString()
+  return parsed.toISOString()
+}
+
+function sanitizeErrorForLogs(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  return trimToMax(message, MAX_AI_ERROR_LENGTH)
+}
+
+function sanitizeFollowups(value) {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .filter((item) => typeof item === 'string')
+    .map((item) => trimToMax(item, 120))
+    .filter(Boolean)
+    .slice(0, 3)
+}
+
+function sanitizeChartConfig(chart) {
+  if (!chart || typeof chart !== 'object') return null
+  if (chart.type !== 'line' && chart.type !== 'bar') return null
+  if (!Array.isArray(chart.labels) || !Array.isArray(chart.series)) return null
+
+  const labels = chart.labels
+    .filter((label) => typeof label === 'string')
+    .map((label) => trimToMax(label, 40))
+    .slice(0, MAX_CHART_LABELS)
+
+  const series = chart.series
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => ({
+      name: sanitizeShortString(item.name, 40),
+      values: Array.isArray(item.values)
+        ? item.values
+            .filter((value) => typeof value === 'number' && Number.isFinite(value))
+            .slice(0, Math.min(labels.length || MAX_CHART_POINTS, MAX_CHART_POINTS))
+        : [],
+    }))
+    .filter((item) => item.name && item.values.length > 0)
+    .slice(0, MAX_CHART_SERIES)
+
+  if (labels.length === 0 || series.length === 0) return null
+
+  return {
+    type: chart.type,
+    title: sanitizeShortString(chart.title, 120, 'Chart'),
+    labels,
+    series,
+  }
 }
 
 async function getUserTimezone(uid) {
@@ -488,14 +599,14 @@ function sanitizeParsedActivities(parsed, timezone, correctionRules = []) {
 
   return parsed
     .map((item) => {
-      const parsedActivity = typeof item?.activity === 'string' ? item.activity.trim() : ''
+      const parsedActivity = sanitizeShortString(item?.activity, MAX_ACTIVITY_LENGTH)
       if (!parsedActivity) return null
       const normalizedActivity = stripDurationPhrase(parsedActivity) || parsedActivity
 
       const inferredCategory = inferCategory(normalizedActivity, correctionRules)
       let category = ACTIVITY_CATEGORIES.includes(item?.category)
         ? item.category
-        : inferredCategory
+        : sanitizeShortString(item?.category, MAX_CATEGORY_LENGTH) || inferredCategory
 
       // If model falls back to "leisure", prefer stronger keyword-based inference.
       if (category === 'leisure' && inferredCategory !== 'leisure') {
@@ -504,20 +615,17 @@ function sanitizeParsedActivities(parsed, timezone, correctionRules = []) {
 
       const subCategory =
         typeof item?.subCategory === 'string' && item.subCategory.trim().length > 0
-          ? item.subCategory.trim()
+          ? sanitizeShortString(item.subCategory, MAX_SUBCATEGORY_LENGTH)
           : toSubCategory(normalizedActivity, category)
 
-      const timestamp =
-        typeof item?.timestamp === 'string' && !Number.isNaN(Date.parse(item.timestamp))
-          ? new Date(item.timestamp).toISOString()
-          : new Date().toISOString()
+      const timestamp = sanitizeIsoTimestamp(item?.timestamp)
 
       const inferredDuration = inferDurationMinutes(parsedActivity)
 
-      let durationMinutes =
-        typeof item?.durationMinutes === 'number' && item.durationMinutes > 0
-          ? Math.round(item.durationMinutes)
-          : inferredDuration
+      let durationMinutes = sanitizeDurationMinutes(item?.durationMinutes)
+      if (durationMinutes === null) {
+        durationMinutes = inferredDuration
+      }
 
       let isPointInTime = durationMinutes === null
       if (isPointInTime) durationMinutes = null
@@ -527,9 +635,7 @@ function sanitizeParsedActivities(parsed, timezone, correctionRules = []) {
           ? null
           : new Date(new Date(timestamp).getTime() + durationMinutes * 60000).toISOString()
 
-      const tags = Array.isArray(item?.tags)
-        ? item.tags.filter((tag) => typeof tag === 'string' && tag.trim().length > 0)
-        : []
+      const tags = sanitizeTags(item?.tags)
 
       const quantity =
         typeof item?.quantity === 'number' && item.quantity > 0
@@ -537,8 +643,8 @@ function sanitizeParsedActivities(parsed, timezone, correctionRules = []) {
           : null
 
       return {
-        activity: normalizedActivity,
-        category,
+        activity: sanitizeShortString(normalizedActivity, MAX_ACTIVITY_LENGTH),
+        category: sanitizeShortString(category, MAX_CATEGORY_LENGTH) || inferredCategory,
         subCategory,
         timestamp,
         endTimestamp,
@@ -624,8 +730,7 @@ async function parseWithGemini({ text, timezone, correctionRules, recentActiviti
   )
 
   if (!response.ok) {
-    const body = await response.text()
-    throw new Error(`Gemini HTTP ${response.status}: ${body}`)
+    throw new Error(`Gemini HTTP ${response.status}`)
   }
 
   const payload = await response.json()
@@ -675,8 +780,7 @@ async function callGeminiJson({
   )
 
   if (!response.ok) {
-    const body = await response.text()
-    throw new Error(`Gemini HTTP ${response.status}: ${body}`)
+    throw new Error(`Gemini HTTP ${response.status}`)
   }
 
   const payload = await response.json()
@@ -884,12 +988,13 @@ async function recordAiTelemetry(uid, payload) {
   try {
     await db.collection(`users/${uid}/aiTelemetry`).add({
       ...payload,
+      error: payload?.error ? sanitizeErrorForLogs(payload.error) : null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     })
   } catch (error) {
     logger.warn('recordAiTelemetry failed', {
       uid,
-      error: String(error),
+      error: sanitizeErrorForLogs(error),
     })
   }
 }
@@ -928,7 +1033,7 @@ async function parseActivities(text, context) {
     }
   } catch (error) {
     logger.warn('Gemini parsing failed, using fallback parser', {
-      error: String(error),
+      error: sanitizeErrorForLogs(error),
       model: GEMINI_MODEL,
     })
 
@@ -951,18 +1056,15 @@ exports.getChatResponse = onCall({ region: 'us-central1' }, async (request) => {
     throw new HttpsError('unauthenticated', 'You must be signed in to use chat.')
   }
 
-  const message = typeof request.data?.message === 'string' ? request.data.message.trim() : ''
+  const message = sanitizeShortString(request.data?.message, MAX_CHAT_MESSAGE_LENGTH)
   const deepResearch = request.data?.deepResearch === true
   const sessionId =
     typeof request.data?.sessionId === 'string' && request.data.sessionId.trim()
-      ? request.data.sessionId.trim()
+      ? sanitizeShortString(request.data.sessionId, MAX_SESSION_ID_LENGTH)
       : db.collection('_').doc().id
 
   if (!message) {
     throw new HttpsError('invalid-argument', 'Message is required.')
-  }
-  if (message.length > 3000) {
-    throw new HttpsError('invalid-argument', 'Message is too long.')
   }
 
   const startedAt = Date.now()
@@ -1030,9 +1132,10 @@ exports.getChatResponse = onCall({ region: 'us-central1' }, async (request) => {
     })
 
     const elapsedMs = Date.now() - startedAt
-    const outputText = typeof parsed.answer === 'string' ? parsed.answer : ''
+    const outputText = sanitizeShortString(parsed.answer, 4000)
     const inputTokens = estimateTokenCount(prompt)
     const outputTokens = estimateTokenCount(outputText)
+    const safeChart = sanitizeChartConfig(parsed.chart)
 
     await recordAiTelemetry(request.auth.uid, {
       endpoint: 'getChatResponse',
@@ -1053,10 +1156,8 @@ exports.getChatResponse = onCall({ region: 'us-central1' }, async (request) => {
       confidence: ['low', 'medium', 'high'].includes(parsed.confidence)
         ? parsed.confidence
         : 'medium',
-      suggestedFollowups: Array.isArray(parsed.suggestedFollowups)
-        ? parsed.suggestedFollowups.slice(0, 3).filter((item) => typeof item === 'string')
-        : [],
-      chart: parsed.chart && typeof parsed.chart === 'object' ? parsed.chart : null,
+      suggestedFollowups: sanitizeFollowups(parsed.suggestedFollowups),
+      chart: safeChart,
       groundedFrom: {
         tier,
         activities: context.activities.length,
@@ -1069,7 +1170,7 @@ exports.getChatResponse = onCall({ region: 'us-central1' }, async (request) => {
   } catch (error) {
     logger.error('getChatResponse failed, using fallback', {
       uid: request.auth.uid,
-      error: String(error),
+      error: sanitizeErrorForLogs(error),
       tier,
     })
 
@@ -1084,7 +1185,7 @@ exports.getChatResponse = onCall({ region: 'us-central1' }, async (request) => {
       outputTokens: 0,
       estimatedCostUsd: 0,
       deepResearch,
-      error: String(error),
+      error: sanitizeErrorForLogs(error),
     })
 
     const fallback = buildFallbackChatResponse(message, context, tier)
@@ -1106,7 +1207,11 @@ exports.getSuggestion = onCall({ region: 'us-central1' }, async (request) => {
 
   try {
     const dismissedIds = Array.isArray(request.data?.dismissedIds)
-      ? request.data.dismissedIds.filter((item) => typeof item === 'string')
+      ? request.data.dismissedIds
+          .filter((item) => typeof item === 'string')
+          .map((item) => sanitizeShortString(item, MAX_SUGGESTION_ID_LENGTH))
+          .filter(Boolean)
+          .slice(0, 50)
       : []
 
     const [todayStatsSnap, recentActivitiesSnap, dismissalSnap] = await Promise.all([
@@ -1168,7 +1273,7 @@ exports.getSuggestion = onCall({ region: 'us-central1' }, async (request) => {
       outputTokens: 0,
       estimatedCostUsd: 0,
       deepResearch: false,
-      error: String(error),
+      error: sanitizeErrorForLogs(error),
     })
     throw new HttpsError('internal', 'Unable to compute suggestion right now.')
   }
@@ -1413,7 +1518,7 @@ exports.onActivityRawCreate = onDocumentCreated(
     const rawData = snapshot.data()
     if (!rawData || rawData.status !== 'pending') return
 
-    const rawInput = typeof rawData.input === 'string' ? rawData.input.trim() : ''
+    const rawInput = sanitizeShortString(rawData.input, MAX_INPUT_LENGTH)
     if (!rawInput) {
       await snapshot.ref.update({
         status: 'failed',
@@ -1427,6 +1532,7 @@ exports.onActivityRawCreate = onDocumentCreated(
       const context = await loadUserContext(uid)
       const result = await parseActivities(rawInput, context)
       const parsed = result.parsed
+      const source = sanitizeActivitySource(rawData.source)
 
       if (parsed.length === 0) {
         await snapshot.ref.update({
@@ -1459,7 +1565,7 @@ exports.onActivityRawCreate = onDocumentCreated(
           mood: null,
           energy: null,
           notes: rawInput,
-          source: rawData.source || 'text',
+          source,
           rawInput,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           editedAt: null,
@@ -1486,7 +1592,7 @@ exports.onActivityRawCreate = onDocumentCreated(
       logger.error('onActivityRawCreate failed', {
         uid,
         rawId,
-        error: String(error),
+        error: sanitizeErrorForLogs(error),
       })
 
       await snapshot.ref.update({
@@ -1547,7 +1653,7 @@ exports.nightlyTrendCompute = onSchedule(
         } catch (error) {
           logger.error('nightlyTrendCompute user failure', {
             uid,
-            error: String(error),
+            error: sanitizeErrorForLogs(error),
           })
         }
       }),
@@ -1615,7 +1721,7 @@ exports.weeklyRecap = onSchedule(
             }
             logger.warn('weeklyRecap using fallback text', {
               uid,
-              error: String(error),
+              error: sanitizeErrorForLogs(error),
             })
           }
 
@@ -1640,7 +1746,7 @@ exports.weeklyRecap = onSchedule(
         } catch (error) {
           logger.error('weeklyRecap user failure', {
             uid,
-            error: String(error),
+            error: sanitizeErrorForLogs(error),
           })
         }
       }),

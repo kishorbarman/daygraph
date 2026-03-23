@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import type { Preset } from '../types'
+import { sanitizePresetList } from './inputGuards'
 
 export const DEFAULT_PRESETS: Preset[] = [
   {
@@ -102,18 +103,7 @@ export function subscribeUserPresets(
 }
 
 export async function saveUserPresets(uid: string, presets: Preset[]) {
-  const sanitized = presets.map((preset) => ({
-    id: preset.id,
-    emoji: preset.emoji,
-    label: preset.label,
-    category: preset.category,
-    subCategory: preset.subCategory,
-    isPointInTime: preset.isPointInTime,
-    usageCount: preset.usageCount ?? 0,
-    ...(typeof preset.defaultDuration === 'number'
-      ? { defaultDuration: preset.defaultDuration }
-      : {}),
-  }))
+  const sanitized = sanitizePresetList(presets)
 
   await setDoc(
     doc(db, `users/${uid}/appConfig/presets`),
